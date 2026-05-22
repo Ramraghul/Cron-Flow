@@ -1,0 +1,111 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String     @id @default(cuid())
+  email     String     @unique
+  password  String
+  workflows Workflow[]
+  apiKeys   ApiKey[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
+model ApiKey {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name       String
+  keyHash    String    @unique
+  keyPrefix  String
+  lastUsedAt DateTime?
+  createdAt  DateTime  @default(now())
+  @@index([keyHash])
+}
+
+model Workflow {
+  id             String         @id @default(cuid())
+  name           String
+  description    String?
+  cronExpression String
+  status         WorkflowStatus @default(ACTIVE)
+  webhookToken   String         @unique @default(cuid())
+  userId         String
+  user           User           @relation(fields: [userId], references: [id])
+  steps          WorkflowStep[]
+  executions     Execution[]
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  @@index([userId, status])
+}
+
+model WorkflowStep {
+  id             String          @id @default(cuid())
+  workflowId     String
+  workflow       Workflow        @relation(fields: [workflowId], references: [id])
+  stepOrder      Int
+  type           StepType
+  config         Json
+  retryCount     Int             @default(3)
+  timeout        Int             @default(30000)
+  executionSteps ExecutionStep[]
+  createdAt      DateTime        @default(now())
+}
+
+enum WorkflowStatus {
+  ACTIVE
+  PAUSED
+}
+
+enum StepType {
+  HTTP
+  DELAY
+}
+
+model Execution {
+  id          String          @id @default(cuid())
+  workflowId  String
+  workflow    Workflow        @relation(fields: [workflowId], references: [id])
+  status      ExecutionStatus @default(PENDING)
+  triggerType TriggerType     @default(MANUAL)
+  startedAt   DateTime?
+  completedAt DateTime?
+  steps       ExecutionStep[]
+  createdAt   DateTime        @default(now())
+  @@index([workflowId, status])
+  @@index([createdAt])
+}
+
+model ExecutionStep {
+  id             String          @id @default(cuid())
+  executionId    String
+  execution      Execution       @relation(fields: [executionId], references: [id])
+  workflowStepId String
+  workflowStep   WorkflowStep    @relation(fields: [workflowStepId], references: [id])
+  status         ExecutionStatus @default(PENDING)
+  attempts       Int             @default(0)
+  logs           String?
+  errorMessage   String?
+  startedAt      DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime        @default(now())
+}
+
+enum ExecutionStatus {
+  PENDING
+  RUNNING
+  SUCCESS
+  FAILED
+}
+
+enum TriggerType {
+  MANUAL
+  CRON
+  WEBHOOK
+}
