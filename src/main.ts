@@ -22,7 +22,7 @@ async function bootstrap(): Promise<void> {
 
     logger.log(`CronFlow API listening on port ${port} — routes under /${API_PREFIX}`, 'Bootstrap');
     if (swaggerEnabled) {
-        logger.log(`Swagger UI: http://localhost:${port}/${DOCS_PATH}`, 'Bootstrap');
+        logger.log(`Swagger UI served at /${DOCS_PATH}`, 'Bootstrap');
     }
 }
 

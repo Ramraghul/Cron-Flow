@@ -1,0 +1,86 @@
+import { INestApplication } from '@nestjs/common';
+import { Test } from '@nestjs/testing';
+import helmet from 'helmet';
+import swaggerUiDistPackage from 'swagger-ui-dist/package.json';
+import request from 'supertest';
+import { App } from 'supertest/types';
+import { DEPLOYED_API_ORIGIN, LOCAL_API_ORIGIN } from '../app.constants';
+import { helmetOptions } from '../app.setup';
+import {
+    apiServers,
+    setupSwagger,
+    shouldLoadSwaggerUiFromCdn,
+    SWAGGER_UI_ASSETS,
+    SWAGGER_UI_CDN_ORIGIN,
+    SWAGGER_UI_VERSION,
+} from './swagger';
+
+const CDN_BASE = `${SWAGGER_UI_CDN_ORIGIN}/npm/swagger-ui-dist@${SWAGGER_UI_VERSION}`;
+
+/** Boots a minimal app with the production Helmet + Swagger setup, as if VERCEL were (or weren't) set. */
+async function createDocsApp(onVercel: boolean): Promise<INestApplication<App>> {
+    if (onVercel) {
+        process.env.VERCEL = '1';
+    }
+    const moduleRef = await Test.createTestingModule({}).compile();
+    const app = moduleRef.createNestApplication<INestApplication<App>>({ logger: false });
+    app.use(helmet(helmetOptions(shouldLoadSwaggerUiFromCdn())));
+    setupSwagger(app);
+    await app.init();
+    return app;
+}
+
+describe('Swagger UI assets', () => {
+    let app: INestApplication<App> | undefined;
+
+    afterEach(async () => {
+        await app?.close();
+        app = undefined;
+        delete process.env.VERCEL;
+    });
+
+    it('pins the CDN to the swagger-ui-dist version installed with @nestjs/swagger', () => {
+        expect(SWAGGER_UI_VERSION).toBe(swaggerUiDistPackage.version);
+    });
+
+    it.each([
+        [{ VERCEL: '1' }, true],
+        [{}, false],
+    ])('uses the CDN only on Vercel (env %j → %s)', (env, expected) => {
+        expect(shouldLoadSwaggerUiFromCdn(env)).toBe(expected);
+    });
+
+    it.each([
+        [{ VERCEL: '1' }, [DEPLOYED_API_ORIGIN, LOCAL_API_ORIGIN]],
+        [{}, [LOCAL_API_ORIGIN, DEPLOYED_API_ORIGIN]],
+    ])('offers local and deployed servers in "Try it out", current environment first (env %j)', (env, expectedOrder) => {
+        expect(apiServers(env).map((server) => server.url)).toEqual(expectedOrder);
+    });
+
+    it('on Vercel, redirects every Swagger UI asset to the CDN and allows that CDN in the Content-Security-Policy', async () => {
+        app = await createDocsApp(true);
+
+        for (const asset of SWAGGER_UI_ASSETS) {
+            const response = await request(app.getHttpServer()).get(`/docs/${asset}`).expect(302);
+            expect(response.headers.location).toBe(`${CDN_BASE}/${asset}`);
+        }
+        const page = await request(app.getHttpServer()).get('/docs').expect(200);
+        expect(page.headers['content-security-policy']).toContain(`script-src 'self' ${SWAGGER_UI_CDN_ORIGIN}`);
+
+        const spec = await request(app.getHttpServer()).get('/docs-json').expect(200);
+        expect((spec.body.servers as Array<{ url: string }>).map((server) => server.url)).toEqual([
+            DEPLOYED_API_ORIGIN,
+            LOCAL_API_ORIGIN,
+        ]);
+    });
+
+    it('elsewhere, serves the bundled assets and keeps the strict default script policy', async () => {
+        app = await createDocsApp(false);
+
+        await request(app.getHttpServer()).get('/docs/swagger-ui-bundle.js').expect(200);
+        const page = await request(app.getHttpServer()).get('/docs').expect(200);
+
+        expect(page.text).not.toContain(SWAGGER_UI_CDN_ORIGIN);
+        expect(page.headers['content-security-policy']).toContain("script-src 'self';");
+    });
+});

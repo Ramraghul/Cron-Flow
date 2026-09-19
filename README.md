@@ -11,6 +11,8 @@
 
 It is built as a production-style backend: validated configuration, layered architecture, a durable job queue with a separate worker process, structured logging, OpenAPI documentation, unit and end-to-end tests, Docker images, CI, and a one-click cloud deployment.
 
+**Live:** [API docs](https://cron-flow-ramraghuls-projects.vercel.app/docs) · [dashboard](https://cron-flow-ui.vercel.app). The hosted API is a demo: on Vercel, scheduled and on-demand runs don't execute (see [Vercel (demo deployment)](#vercel-demo-deployment)).
+
 ---
 
 ## Contents
@@ -35,6 +37,7 @@ It is built as a production-style backend: validated configuration, layered arch
   - [Status codes and errors](#status-codes-and-errors)
 - [API documentation (Swagger)](#api-documentation-swagger)
 - [Deployment](#deployment)
+  - [Vercel (demo deployment)](#vercel-demo-deployment)
   - [Render (one-click Blueprint)](#render-one-click-blueprint)
   - [Any container platform](#any-container-platform)
   - [Production checklist](#production-checklist)
@@ -372,9 +375,9 @@ npm run start:dev
 
 To run the worker as its own process, as in production, set `WORKER_ENABLED=false` in `.env` and run `npm run start:worker:dev` in a second terminal.
 
-**Dashboard:** open `dashboard.html` directly in a browser (no build step). It connects to `http://localhost:3000` by default; log in or register to see workflows, executions, schedules, metrics and webhook URLs.
+**Dashboard:** open `dashboard.html` directly in a browser (no build step), then log in or register to see workflows, executions, schedules, metrics and webhook URLs. Its **API** selector switches between **Local** (`http://localhost:3000`) and **Deployed** (`https://cron-flow-ramraghuls-projects.vercel.app`), or takes a custom URL, and each server keeps its own login. Opened from this machine it starts on Local; hosted (like [cron-flow-ui.vercel.app](https://cron-flow-ui.vercel.app)) it starts on Deployed. A `?api=https://…` parameter in the page address overrides both. The servers are listed in `API_TARGETS` at the top of its script.
 
-The same file can be hosted as a static site (for example on Vercel). A hosted copy connects to `PRODUCTION_API_BASE`, set at the top of its script, or to a URL passed as `?api=https://…`. It also remembers whatever you enter in the API Base URL field. For a hosted dashboard, the API must be served over **HTTPS** (browsers block `http://` APIs from `https://` pages), and its `CORS_ORIGINS` must include the dashboard's origin.
+For a hosted dashboard, the API must be served over **HTTPS** (browsers block `http://` APIs from `https://` pages, except `localhost`), and the API's `CORS_ORIGINS` must include the dashboard's origin.
 
 ### Environment variables
 
@@ -427,7 +430,12 @@ Jest transpiles tests without type-checking, for speed. `npm run typecheck` cove
 
 ## Using the API
 
-Base URL: `http://localhost:3000/api/v1`. Send request bodies as JSON.
+| Server | Base URL |
+| --- | --- |
+| Local | `http://localhost:3000/api/v1` |
+| Deployed | `https://cron-flow-ramraghuls-projects.vercel.app/api/v1` |
+
+Send request bodies as JSON.
 
 ### Walkthrough with curl
 
@@ -436,7 +444,8 @@ The examples use [`jq`](https://jqlang.github.io/jq/) to pull values out of resp
 **1. Register (or log in) and keep the token**
 
 ```bash
-API=http://localhost:3000/api/v1
+API=http://localhost:3000/api/v1                                  # local
+# API=https://cron-flow-ramraghuls-projects.vercel.app/api/v1     # deployed
 
 TOKEN=$(curl -s -X POST "$API/auth/register" \
   -H 'Content-Type: application/json' \
@@ -634,8 +643,9 @@ Every error uses one envelope. `requestId` matches the `X-Request-Id` response h
 
 ## API documentation (Swagger)
 
-- **Swagger UI:** `http://localhost:3000/docs`. Click **Authorize** and paste a JWT or API key; authorization persists across reloads. Request bodies include ready-to-send examples.
-- **OpenAPI JSON:** `http://localhost:3000/docs-json`.
+- **Swagger UI:** `http://localhost:3000/docs` locally, or the [deployed docs](https://cron-flow-ramraghuls-projects.vercel.app/docs). Click **Authorize** and paste a JWT or API key; authorization persists across reloads. Request bodies include ready-to-send examples.
+- **OpenAPI JSON:** `/docs-json` on either server.
+- **"Try it out" servers:** the **Servers** dropdown offers Local and Deployed; the one you're viewing the docs on is selected by default. Calling the deployed API from local docs requires `http://localhost:3000` in its `CORS_ORIGINS`.
 - **Committed spec:** [`docs/openapi.json`](docs/openapi.json), viewable without running anything. Regenerate it after API changes with `npm run openapi:export`, which needs no database, Redis or `.env`.
 
 Every endpoint documents its request schema, parameters, response schema with examples, and each error status it can return. Set `SWAGGER_ENABLED=false` to hide the docs in production.
@@ -645,6 +655,18 @@ Every endpoint documents its request schema, parameters, response schema with ex
 ## Deployment
 
 The same image runs everywhere: `node dist/main.js` for the API and `node dist/worker.js` for the worker. Set `RUN_MIGRATIONS=true` to apply pending migrations before start. Prisma takes an advisory lock, so this is safe with several replicas.
+
+### Vercel (demo deployment)
+
+The live demo runs on Vercel at `https://cron-flow-ramraghuls-projects.vercel.app`. Vercel runs the app only while it answers a request, so there is no worker between requests: **on-demand runs, webhook runs and cron schedules stay `PENDING`**. Everything else (auth, workflow management, API keys, metrics, Swagger) works. For executions that actually run, use [Render](#render-one-click-blueprint) or [any container platform](#any-container-platform).
+
+How it is set up:
+
+1. Import the repository in Vercel (NestJS is detected automatically), and add the **Prisma Postgres** and **Redis** integrations from the **Storage** tab.
+2. Set these environment variables: `DATABASE_URL` (the plain `postgres://…` string, without quotes), `REDIS_URL`, `JWT_SECRET` (32+ characters), `NODE_ENV=production`, `WORKER_ENABLED=false`, and `CORS_ORIGINS=https://cron-flow-ui.vercel.app,http://localhost:3000`. Don't set `PORT`; Vercel assigns it.
+3. Vercel doesn't run migrations. Apply them once from your machine: `DATABASE_URL='postgres://…' npx prisma migrate deploy`.
+4. **Make it public:** under **Settings → Deployment Protection**, disable **Vercel Authentication**. Otherwise every request is redirected to a Vercel login, and the dashboard can't reach the API.
+5. Vercel's bundle leaves out Swagger UI's static files. The app detects Vercel (`VERCEL=1`) and redirects those files to a CDN, so `/docs` works there too.
 
 ### Render (one-click Blueprint)
 
@@ -822,6 +844,7 @@ The `20260914120000_v3_execution_history` migration back-fills existing data saf
 | HTTP step fails with `non-public address` | The SSRF guard blocked a local/private URL. For local testing only, set `HTTP_STEP_ALLOW_PRIVATE_NETWORKS=true`. |
 | `429` on login during testing | Register and login allow 10 requests per minute per IP. Wait a minute. |
 | e2e tests cannot connect | Run `docker compose up -d postgres redis`, or set `E2E_DATABASE_URL` / `E2E_REDIS_URL`. |
+| The deployed API redirects to a Vercel login page | Vercel's Deployment Protection is on. Disable **Vercel Authentication** under **Settings → Deployment Protection**. |
 | Prisma client errors after pulling changes | Run `npm run prisma:generate` (also runs automatically on `npm install`). |
 
 ---

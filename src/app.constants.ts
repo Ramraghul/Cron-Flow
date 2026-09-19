@@ -16,3 +16,7 @@ export const REQUEST_ID_HEADER = 'x-request-id';
 /** Security scheme names referenced by Swagger decorators. */
 export const JWT_SECURITY_SCHEME = 'JWT';
 export const API_KEY_SECURITY_SCHEME = 'ApiKey';
+
+/** Where the API runs. Offered as servers in Swagger UI's "Try it out" and used in the README examples. */
+export const LOCAL_API_ORIGIN = 'http://localhost:3000';
+export const DEPLOYED_API_ORIGIN = 'https://cron-flow-ramraghuls-projects.vercel.app';

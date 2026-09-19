@@ -1737,7 +1737,16 @@
       "description": "Liveness and readiness probes"
     }
   ],
-  "servers": [],
+  "servers": [
+    {
+      "url": "http://localhost:3000",
+      "description": "Local development"
+    },
+    {
+      "url": "https://cron-flow-ramraghuls-projects.vercel.app",
+      "description": "Deployed (Vercel)"
+    }
+  ],
   "components": {
     "securitySchemes": {
       "JWT": {

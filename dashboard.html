@@ -32,6 +32,7 @@
   .auth-bar label { color: var(--muted); font-size: 13px; white-space: nowrap; }
   .auth-bar input { flex: 1; min-width: 200px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 7px 12px; color: var(--text); font-size: 13px; }
   .auth-bar input:focus { outline: none; border-color: var(--accent); }
+  .auth-bar select { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 7px 10px; color: var(--text); font-size: 13px; }
 
   /* Buttons */
   button { cursor: pointer; border: none; border-radius: 6px; padding: 8px 16px; font-size: 13px; font-weight: 600; transition: opacity .15s, transform .1s; }
@@ -132,8 +133,9 @@
 
   <!-- Auth bar -->
   <div class="auth-bar">
-    <label>API Base URL:</label>
-    <input id="base-url" placeholder="https://your-api.example.com" style="max-width:240px;" />
+    <label>API:</label>
+    <select id="api-target" onchange="selectApiTarget(this.value)" title="Choose the API server"></select>
+    <input id="base-url" placeholder="https://your-api.example.com" style="max-width:260px;" />
     <label>JWT Token:</label>
     <input id="token-input" type="password" placeholder="Paste token from login..." style="max-width:320px;" />
     <button class="btn-primary" onclick="connect()">Connect</button>
@@ -262,13 +264,18 @@
 
 <script>
 // ─── State ─────────────────────────────────────────────────────────────────
-// Set this to your deployed API (https://…) so the hosted dashboard connects without typing a URL.
-// Local copies (localhost, or opened as a file) default to the API on this machine.
-const PRODUCTION_API_BASE = '';
+// API servers offered in the selector. Opened from this machine (localhost, or as a file) the dashboard
+// starts on "local"; hosted anywhere else it starts on "deployed". Any other URL can be entered as Custom.
+const API_TARGETS = [
+  { id: 'local', label: 'Local (localhost:3000)', url: 'http://localhost:3000' },
+  { id: 'deployed', label: 'Deployed (Vercel)', url: 'https://cron-flow-ramraghuls-projects.vercel.app' },
+];
 const IS_LOCAL = ['localhost', '127.0.0.1', ''].includes(location.hostname);
-const DEFAULT_BASE = IS_LOCAL ? 'http://localhost:3000' : PRODUCTION_API_BASE;
+const DEFAULT_BASE = API_TARGETS.find(t => t.id === (IS_LOCAL ? 'local' : 'deployed')).url;
 const API_PREFIX = '/api/v1';
 let BASE = DEFAULT_BASE;
+// Login token per API server: a token issued by one server is not valid on another.
+let savedTokens = {};
 let TOKEN = '';
 let steps = [];
 let stepCounter = 0;
@@ -306,7 +313,11 @@ async function api(method, path, body) {
 }
 
 function saveConfig() {
-  try { localStorage.setItem('cronflow_config', JSON.stringify({ base: BASE, token: TOKEN })); } catch {}
+  if (BASE) {
+    if (TOKEN) savedTokens[BASE] = TOKEN;
+    else delete savedTokens[BASE];
+  }
+  try { localStorage.setItem('cronflow_config', JSON.stringify({ base: BASE, tokens: savedTokens })); } catch {}
 }
 
 function setToken(token) {
@@ -321,9 +332,14 @@ function isBlockedMixedContent(base) {
   return location.protocol === 'https:' && url.protocol === 'http:' && !['localhost', '127.0.0.1'].includes(url.hostname);
 }
 
+// Accepts an API address with or without trailing slashes or the /api/v1 prefix, and returns the server part.
+function normaliseBase(value) {
+  return String(value || '').trim().replace(/\/+$/, '').replace(/\/api\/v1$/, '');
+}
+
 // Reads the API Base URL field; returns false (after telling the user why) if it can't be used.
 function applyBaseFromInput() {
-  const base = document.getElementById('base-url').value.trim().replace(/\/+$/, '');
+  const base = normaliseBase(document.getElementById('base-url').value);
   try {
     if (base && isBlockedMixedContent(base)) {
       toast('This page is served over HTTPS, so the browser blocks an http:// API. Use the API’s https:// URL.', 'error');
@@ -334,7 +350,25 @@ function applyBaseFromInput() {
     return false;
   }
   BASE = base;
+  document.getElementById('base-url').value = base;
   return true;
+}
+
+// Switches to one of API_TARGETS and restores the login saved for that server; "custom" lets you type any URL.
+function selectApiTarget(id) {
+  const target = API_TARGETS.find(t => t.id === id);
+  if (!target) { document.getElementById('base-url').focus(); return; }
+  BASE = target.url;
+  document.getElementById('base-url').value = BASE;
+  TOKEN = savedTokens[BASE] || '';
+  document.getElementById('token-input').value = TOKEN;
+  saveConfig();
+  refresh();
+}
+
+function syncTargetSelector() {
+  const target = API_TARGETS.find(t => t.url === BASE);
+  document.getElementById('api-target').value = target ? target.id : 'custom';
 }
 
 // ─── Connect ────────────────────────────────────────────────────────────────
@@ -345,13 +379,28 @@ function connect() {
 }
 
 async function refresh() {
-  if (!BASE) { setConnBadge(false); return; }
+  syncTargetSelector();
+  if (!BASE) { setConnBadge(false); showLoggedOut(); return; }
   try {
     const health = await fetch(BASE + '/health/ready').then(r => r.json());
     setConnBadge(health.status === 'ok');
   } catch { setConnBadge(false); }
-  if (!TOKEN) return;
+  if (!TOKEN) { showLoggedOut(); return; }
   await Promise.allSettled([loadMetrics(), loadWorkflows(), loadApiKeys(), loadScheduler()]);
+}
+
+// Clears data shown from a previous server or session.
+function showLoggedOut() {
+  for (const id of ['s-total-wf', 's-active-wf', 's-paused-wf', 's-total-ex', 's-success-rate', 's-avg-dur']) {
+    document.getElementById(id).textContent = '—';
+  }
+  if (statusChart) { statusChart.destroy(); statusChart = null; }
+  if (triggerChart) { triggerChart.destroy(); triggerChart = null; }
+  for (const id of ['wf-table-wrap', 'keys-table-wrap', 'scheduler-wrap']) {
+    document.getElementById(id).innerHTML = '<div class="empty">Log in to load data from this server</div>';
+  }
+  document.getElementById('exec-wf-label').textContent = '';
+  document.getElementById('exec-table-wrap').innerHTML = '<div class="empty" style="color:var(--muted)">Select a workflow to view executions</div>';
 }
 
 function setConnBadge(ok) {
@@ -704,13 +753,18 @@ function toast(msg, type = 'info') {
 // Poll health every 30s
 setInterval(() => { if (BASE) fetch(BASE + '/health/ready').then(r => r.json()).then(d => setConnBadge(d.status==='ok')).catch(() => setConnBadge(false)); }, 30000);
 
-// Restore settings: ?api=<url> in the page address wins, then the last saved values, then the default.
+document.getElementById('api-target').innerHTML =
+  API_TARGETS.map(t => `<option value="${t.id}">${esc(t.label)}</option>`).join('') + '<option value="custom">Custom URL…</option>';
+
+// Restore settings: ?api=<url> in the page address wins, then the last server used, then the default.
 try {
   const saved = JSON.parse(localStorage.getItem('cronflow_config') || '{}');
+  // Earlier versions saved a single token; keep it for the server it belonged to.
+  savedTokens = saved.tokens || (saved.base && saved.token ? { [normaliseBase(saved.base)]: saved.token } : {});
   const fromQuery = new URLSearchParams(location.search).get('api');
-  BASE = (fromQuery || saved.base || DEFAULT_BASE).replace(/\/+$/, '');
-  TOKEN = saved.token || '';
+  BASE = normaliseBase(fromQuery || saved.base || DEFAULT_BASE);
 } catch {}
+TOKEN = savedTokens[BASE] || '';
 document.getElementById('base-url').value = BASE;
 document.getElementById('token-input').value = TOKEN;
 refresh();
