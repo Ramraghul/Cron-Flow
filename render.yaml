@@ -1,29 +1,38 @@
-# Render Blueprint — provisions the API, PostgreSQL and a Redis-compatible Key Value store.
-# Spec: https://render.com/docs/blueprint-spec
+# Render Blueprint — CronFlow API on free plans only (nothing here is billed).
+# Spec: https://render.com/docs/blueprint-spec · Step-by-step guide: README → Deployment → Render
 #
-# Free-plan caveat: free web services sleep after ~15 minutes without traffic, and cron schedules
-# cannot fire while the service is asleep. For dependable schedules, use a paid instance type and,
-# optionally, the dedicated worker at the bottom of this file.
+#   cronflow-api     Render web service, Free    API with the worker running in-process (Docker)
+#   cronflow-redis   Render Key Value, Free      Redis for the job queue and cron schedules
+#   PostgreSQL       Neon, Free (external)       permanent free database; Render's free Postgres expires after 30 days
+#
+# Free-plan behaviour:
+#   * The web service sleeps after 15 minutes without traffic, and cron schedules cannot fire while it
+#     sleeps. A free uptime monitor requesting /health/live every 5 minutes keeps it awake.
+#   * Key Value data lives in memory only. The API re-registers every schedule from PostgreSQL when it
+#     starts, so schedules survive restarts.
 services:
   - type: web
     name: cronflow-api
     runtime: docker
     plan: free
-    region: oregon
+    region: singapore
     dockerfilePath: ./Dockerfile
     dockerContext: .
-    # Readiness (PostgreSQL + Redis) gates each deploy: a release with a broken connection never goes live.
-    healthCheckPath: /health/ready
+    # Liveness rather than readiness: /health/ready queries the database, and a health check polled around
+    # the clock would keep Neon from ever suspending, using up its free compute hours.
+    healthCheckPath: /health/live
     autoDeployTrigger: checksPass
     envVars:
       - key: NODE_ENV
         value: production
       - key: RUN_MIGRATIONS
         value: "true"
+      # Neon pooled connection string with &pgbouncer=true&connect_timeout=15 appended (you paste it on first deploy).
       - key: DATABASE_URL
-        fromDatabase:
-          name: cronflow-db
-          property: connectionString
+        sync: false
+      # Neon direct (non-pooled) connection string, used only to apply migrations at startup.
+      - key: DIRECT_DATABASE_URL
+        sync: false
       - key: REDIS_URL
         fromService:
           type: keyvalue
@@ -36,9 +45,10 @@ services:
       # Render terminates TLS at its proxy; trust one hop so rate limiting sees real client IPs.
       - key: TRUST_PROXY_HOPS
         value: "1"
+      # The hosted dashboard. Add more origins comma-separated if needed.
       - key: CORS_ORIGINS
-        value: "*"
-      # Background workers are not on the free plan, so jobs run inside the API process.
+        value: https://cron-flow-ui.vercel.app
+      # Background workers aren't available on the free plan, so jobs run inside the API process.
       - key: WORKER_ENABLED
         value: "true"
       - key: HTTP_STEP_ALLOW_PRIVATE_NETWORKS
@@ -49,42 +59,8 @@ services:
   - type: keyvalue
     name: cronflow-redis
     plan: free
-    region: oregon
+    region: singapore
     # BullMQ requires noeviction: evicting keys would silently drop queued jobs.
     maxmemoryPolicy: noeviction
     # An empty allow list keeps the instance reachable only from Render's private network.
     ipAllowList: []
-
-  # ── Optional: dedicated worker (paid plans) ───────────────────────────────
-  # Uncomment, set WORKER_ENABLED=false on cronflow-api, and give it the same
-  # DATABASE_URL, REDIS_URL and JWT_SECRET values as the web service.
-  #
-  # - type: worker
-  #   name: cronflow-worker
-  #   runtime: docker
-  #   plan: starter
-  #   region: oregon
-  #   dockerfilePath: ./Dockerfile
-  #   dockerCommand: node dist/worker.js
-  #   envVars:
-  #     - key: NODE_ENV
-  #       value: production
-  #     - key: DATABASE_URL
-  #       fromDatabase:
-  #         name: cronflow-db
-  #         property: connectionString
-  #     - key: REDIS_URL
-  #       fromService:
-  #         type: keyvalue
-  #         name: cronflow-redis
-  #         property: connectionString
-  #     - key: JWT_SECRET
-  #       sync: false
-
-databases:
-  - name: cronflow-db
-    databaseName: cronflow
-    user: cronflow
-    plan: free
-    region: oregon
-    postgresMajorVersion: "16"

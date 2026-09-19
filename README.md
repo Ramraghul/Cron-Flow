@@ -399,6 +399,7 @@ All variables are validated at startup (`src/config/env.validation.ts`). If anyt
 | `SCHEDULER_SYNC_ON_BOOT` | `true` | Reconcile Redis schedules with ACTIVE workflows when the API starts. |
 | `HTTP_STEP_ALLOW_PRIVATE_NETWORKS` | `false` | Allow HTTP steps to reach loopback/private/link-local addresses. Keep `false` in production. |
 | `RUN_MIGRATIONS` | `false` | *Container only.* Run `prisma migrate deploy` before starting. |
+| `DIRECT_DATABASE_URL` | — | *Container only, optional.* Direct (non-pooled) PostgreSQL URL used for migrations when `DATABASE_URL` goes through a connection pooler, such as Neon's. |
 | `E2E_DATABASE_URL` / `E2E_REDIS_URL` | see `test/e2e/env.ts` | *Tests only.* Where the e2e suite connects. |
 
 ---
@@ -647,24 +648,49 @@ The same image runs everywhere: `node dist/main.js` for the API and `node dist/w
 
 ### Render (one-click Blueprint)
 
-[`render.yaml`](render.yaml) provisions the API (Docker), a PostgreSQL database and a Redis-compatible Key Value instance, and wires their connection strings together.
+[`render.yaml`](render.yaml) deploys CronFlow on **free plans only**:
 
-1. Push this repository to your GitHub account.
-2. In the [Render Dashboard](https://dashboard.render.com), choose **New → Blueprint** and select the repository.
-3. Review the three resources (`cronflow-api`, `cronflow-db`, `cronflow-redis`) and click **Apply**. Render generates `JWT_SECRET` for you.
-4. The first deploy builds the image, applies migrations and waits for `/health/ready` to return `200` before routing traffic.
-5. Verify:
+| Resource | Plan | Role |
+| --- | --- | --- |
+| `cronflow-api` web service | Render Free | API, with the worker running in the same process (Docker) |
+| `cronflow-redis` Key Value | Render Free | Redis for the job queue and cron schedules |
+| PostgreSQL | [Neon](https://neon.com) Free (external) | Permanent free database. Render's own free Postgres expires after 30 days |
+
+**1. Create the database on Neon** (free, no card required)
+
+1. Sign up at [neon.com](https://neon.com) and create a project. Choose the region closest to Render's; the Blueprint uses Singapore, so pick **AWS Asia Pacific (Singapore)**.
+2. Open **Connect** and copy two connection strings:
+   - **Pooled** (connection pooling on). Append `&pgbouncer=true&connect_timeout=15`. This is `DATABASE_URL`.
+   - **Direct** (connection pooling off). This is `DIRECT_DATABASE_URL`, used only to apply migrations.
+
+   The app goes through Neon's pooler, as Neon recommends: the pooler handles the database sleeping and waking, and idle app connections don't hold it open.
+
+**2. Deploy on Render**
+
+1. Push this repository to GitHub.
+2. In the [Render Dashboard](https://dashboard.render.com), choose **New → Blueprint**, select the repository, and check that both services show the **Free** plan.
+3. When prompted, paste `DATABASE_URL` and `DIRECT_DATABASE_URL` from Neon, then click **Apply**. Render generates `JWT_SECRET` for you.
+4. The first deploy builds the Docker image and applies the migrations. Then verify:
 
    ```bash
    curl https://<your-service>.onrender.com/health/ready
    ```
 
-   Then open `https://<your-service>.onrender.com/docs`.
-6. Optionally, set `CORS_ORIGINS` to your front-end's origin and add a custom domain.
+   and open `https://<your-service>.onrender.com/docs`.
 
-With `autoDeployTrigger: checksPass`, each push to `main` redeploys **after CI passes**.
+**3. Keep it awake (free)**
 
-> **Free-plan caveats.** Free web services sleep after a period without traffic, and **cron schedules cannot fire while the service is asleep**. Free PostgreSQL instances also expire (check Render's current limits). For dependable schedules, choose a paid instance type. To scale the worker separately, uncomment the `cronflow-worker` service in `render.yaml` and set `WORKER_ENABLED=false` on the API.
+Free web services sleep after 15 minutes without traffic, and **cron schedules cannot fire while the service is asleep**. Create a free HTTP monitor (for example on [UptimeRobot](https://uptimerobot.com)) that requests `https://<your-service>.onrender.com/health/live` every 5 minutes. `/health/live` doesn't touch the database, so it keeps the API awake without waking Neon.
+
+**4. Connect the dashboard**
+
+Set `PRODUCTION_API_BASE` at the top of the dashboard's script to `https://<your-service>.onrender.com`. `render.yaml` sets `CORS_ORIGINS` to `https://cron-flow-ui.vercel.app`; if your dashboard lives elsewhere, change it under **Render → cronflow-api → Environment**.
+
+> **Staying within the free limits**
+> - Render includes 750 free instance hours per workspace each month: enough for one service running all month, but shared with any other free services in the same workspace.
+> - Neon's free plan includes 100 compute-hours a month and suspends after 5 idle minutes. Keep the combined schedules of all workflows to at most one run every 10–15 minutes; more frequent runs keep the database awake enough to use up the hours, after which it pauses until the next month (it is never billed).
+> - Free Key Value keeps data in memory only. On every start the API re-registers all schedules from PostgreSQL, so only a job queued at the exact moment of a restart can be lost.
+> - With `autoDeployTrigger: checksPass`, pushes to `main` redeploy only after CI passes.
 
 ### Any container platform
 
@@ -675,7 +701,7 @@ The same steps work on AWS ECS/Fargate, Google Cloud Run (with an always-on work
 3. **Run two services** from the image:
    - **API:** default command, port `3000`, `WORKER_ENABLED=false`, one or more replicas.
    - **Worker:** command `node dist/worker.js`, no port, scaled by queue load.
-4. **Migrations:** set `RUN_MIGRATIONS=true` on the API, or run `npx prisma migrate deploy` as a pre-deploy/one-off task.
+4. **Migrations:** set `RUN_MIGRATIONS=true` on the API, or run `npx prisma migrate deploy` as a pre-deploy/one-off task. If `DATABASE_URL` goes through a connection pooler, also set `DIRECT_DATABASE_URL` to a direct connection.
 5. **Probes:** liveness `GET /health/live`, readiness `GET /health/ready`.
 6. **Shutdown:** allow ≥ 30 s for termination so the worker can finish in-flight executions. The image uses `tini`, so `SIGTERM` reaches the app.
 7. **Behind a load balancer:** set `TRUST_PROXY_HOPS=1` so rate limiting uses real client IPs.
