@@ -6,6 +6,7 @@ import { API_PREFIX, DOCS_PATH } from './app.constants';
 import { AppModule } from './app.module';
 import { configureApp } from './app.setup';
 import { AppConfig } from './config/configuration';
+import { shouldLoadSwaggerUiFromCdn } from './swagger/swagger';
 
 async function bootstrap(): Promise<void> {
     const app = await NestFactory.create<NestExpressApplication>(AppModule, {
@@ -22,7 +23,8 @@ async function bootstrap(): Promise<void> {
 
     logger.log(`CronFlow API listening on port ${port} — routes under /${API_PREFIX}`, 'Bootstrap');
     if (swaggerEnabled) {
-        logger.log(`Swagger UI served at /${DOCS_PATH}`, 'Bootstrap');
+        const assetSource = shouldLoadSwaggerUiFromCdn() ? 'CDN' : 'local files';
+        logger.log(`Swagger UI served at /${DOCS_PATH} (UI assets from ${assetSource})`, 'Bootstrap');
     }
 }
 

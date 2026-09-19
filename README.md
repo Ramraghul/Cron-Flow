@@ -666,7 +666,7 @@ How it is set up:
 2. Set these environment variables: `DATABASE_URL` (the plain `postgres://…` string, without quotes), `REDIS_URL`, `JWT_SECRET` (32+ characters), `NODE_ENV=production`, `WORKER_ENABLED=false`, and `CORS_ORIGINS=https://cron-flow-ui.vercel.app,http://localhost:3000`. Don't set `PORT`; Vercel assigns it.
 3. Vercel doesn't run migrations. Apply them once from your machine: `DATABASE_URL='postgres://…' npx prisma migrate deploy`.
 4. **Make it public:** under **Settings → Deployment Protection**, disable **Vercel Authentication**. Otherwise every request is redirected to a Vercel login, and the dashboard can't reach the API.
-5. Vercel's bundle leaves out Swagger UI's static files. The app detects Vercel (`VERCEL=1`) and redirects those files to a CDN, so `/docs` works there too.
+5. Vercel ships only the files the code visibly references. The app resolves Swagger UI's files (`swagger-ui-dist`) explicitly, so Vercel includes them and `/docs` serves them directly. If they are ever missing, it falls back to the jsDelivr CDN. The startup log shows which: `Swagger UI served at /docs (UI assets from local files)`.
 
 ### Render (one-click Blueprint)
 

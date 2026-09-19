@@ -1,6 +1,8 @@
 import { INestApplication } from '@nestjs/common';
 import { DocumentBuilder, OpenAPIObject, SwaggerModule } from '@nestjs/swagger';
 import { Request, Response } from 'express';
+import { existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import {
     API_KEY_HEADER,
     API_KEY_SECURITY_SCHEME,
@@ -51,6 +53,11 @@ export function apiServers(env: NodeJS.ProcessEnv = process.env): ApiServer[] {
     return isOnVercel(env) ? [deployed, local] : [local, deployed];
 }
 
+/** Vercel sets VERCEL=1 in deployments that expose system environment variables (the default). */
+function isOnVercel(env: NodeJS.ProcessEnv): boolean {
+    return Boolean(env.VERCEL);
+}
+
 export function buildOpenApiDocument(app: INestApplication): OpenAPIObject {
     const builder = new DocumentBuilder()
         .setTitle('CronFlow API')
@@ -82,10 +89,14 @@ export function buildOpenApiDocument(app: INestApplication): OpenAPIObject {
     });
 }
 
-/** swagger-ui-dist version loaded from the CDN. Must match the version installed with @nestjs/swagger (swagger.spec.ts enforces this). */
-export const SWAGGER_UI_VERSION = '5.32.13';
-export const SWAGGER_UI_CDN_ORIGIN = 'https://cdn.jsdelivr.net';
-const SWAGGER_UI_CDN_BASE = `${SWAGGER_UI_CDN_ORIGIN}/npm/swagger-ui-dist@${SWAGGER_UI_VERSION}`;
+/**
+ * Swagger UI's static files (the swagger-ui-dist package), served directly at /docs.
+ *
+ * Vercel ships each function with only the files its code visibly references. @nestjs/swagger finds this
+ * directory in a way Vercel can't follow, so on its own /docs renders a blank page there. Resolving the
+ * package here, with a path Vercel can follow, makes it ship the whole directory, and /docs serves from it.
+ */
+export const SWAGGER_UI_ASSETS_DIRECTORY = dirname(require.resolve('swagger-ui-dist/package.json'));
 
 /** Static files requested by the Swagger UI page that @nestjs/swagger renders. */
 export const SWAGGER_UI_ASSETS = [
@@ -96,19 +107,18 @@ export const SWAGGER_UI_ASSETS = [
     'favicon-16x16.png',
 ] as const;
 
-/**
- * Vercel packages each function with only the files its code visibly references. Swagger UI's scripts and
- * styles are read from disk at runtime, so Vercel leaves them out and /docs renders a blank page. Vercel sets
- * VERCEL=1; there, requests for those files are redirected to the same files on a CDN. Everywhere else the
- * bundled copies are served as usual.
- */
-export function shouldLoadSwaggerUiFromCdn(env: NodeJS.ProcessEnv = process.env): boolean {
-    return isOnVercel(env);
+/** Fallback CDN. Its swagger-ui-dist version must match the installed one (swagger.spec.ts enforces this). */
+export const SWAGGER_UI_VERSION = '5.32.13';
+export const SWAGGER_UI_CDN_ORIGIN = 'https://cdn.jsdelivr.net';
+const SWAGGER_UI_CDN_BASE = `${SWAGGER_UI_CDN_ORIGIN}/npm/swagger-ui-dist@${SWAGGER_UI_VERSION}`;
+
+/** Fallback for a deployment that still lacks Swagger UI's files: redirect requests for them to the CDN. */
+export function shouldLoadSwaggerUiFromCdn(assetsOnDisk: boolean = swaggerUiAssetsOnDisk()): boolean {
+    return !assetsOnDisk;
 }
 
-/** Vercel sets VERCEL=1 in every deployment. */
-function isOnVercel(env: NodeJS.ProcessEnv): boolean {
-    return Boolean(env.VERCEL);
+export function swaggerUiAssetsOnDisk(directory: string = SWAGGER_UI_ASSETS_DIRECTORY): boolean {
+    return SWAGGER_UI_ASSETS.every((asset) => existsSync(join(directory, asset)));
 }
 
 function redirectSwaggerUiAssetsToCdn(app: INestApplication): void {
@@ -122,7 +132,7 @@ function redirectSwaggerUiAssetsToCdn(app: INestApplication): void {
 
 /** Serves Swagger UI at /docs and the raw document at /docs-json. */
 export function setupSwagger(app: INestApplication): void {
-    // Registered first, so these routes answer before the (empty) static-file handler.
+    // Registered first, so these routes answer before the static-file handler.
     if (shouldLoadSwaggerUiFromCdn()) {
         redirectSwaggerUiAssetsToCdn(app);
     }
@@ -130,6 +140,7 @@ export function setupSwagger(app: INestApplication): void {
     SwaggerModule.setup(DOCS_PATH, app, () => buildOpenApiDocument(app), {
         jsonDocumentUrl: `${DOCS_PATH}-json`,
         customSiteTitle: 'CronFlow API Docs',
+        customSwaggerUiPath: SWAGGER_UI_ASSETS_DIRECTORY,
         swaggerOptions: {
             persistAuthorization: true,
             displayRequestDuration: true,

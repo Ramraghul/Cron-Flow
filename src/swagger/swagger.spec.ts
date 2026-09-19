@@ -1,6 +1,7 @@
 import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import helmet from 'helmet';
+import fs from 'node:fs';
 import swaggerUiDistPackage from 'swagger-ui-dist/package.json';
 import request from 'supertest';
 import { App } from 'supertest/types';
@@ -13,11 +14,12 @@ import {
     SWAGGER_UI_ASSETS,
     SWAGGER_UI_CDN_ORIGIN,
     SWAGGER_UI_VERSION,
+    swaggerUiAssetsOnDisk,
 } from './swagger';
 
 const CDN_BASE = `${SWAGGER_UI_CDN_ORIGIN}/npm/swagger-ui-dist@${SWAGGER_UI_VERSION}`;
 
-/** Boots a minimal app with the production Helmet + Swagger setup, as if VERCEL were (or weren't) set. */
+/** Boots a minimal app with the production Helmet + Swagger setup, optionally as if running on Vercel. */
 async function createDocsApp(onVercel: boolean): Promise<INestApplication<App>> {
     if (onVercel) {
         process.env.VERCEL = '1';
@@ -37,6 +39,7 @@ describe('Swagger UI assets', () => {
         await app?.close();
         app = undefined;
         delete process.env.VERCEL;
+        jest.restoreAllMocks();
     });
 
     it('pins the CDN to the swagger-ui-dist version installed with @nestjs/swagger', () => {
@@ -44,10 +47,14 @@ describe('Swagger UI assets', () => {
     });
 
     it.each([
-        [{ VERCEL: '1' }, true],
-        [{}, false],
-    ])('uses the CDN only on Vercel (env %j → %s)', (env, expected) => {
-        expect(shouldLoadSwaggerUiFromCdn(env)).toBe(expected);
+        [true, false],
+        [false, true],
+    ])('falls back to the CDN only when the Swagger UI files are missing (files on disk: %s → CDN: %s)', (assetsOnDisk, expected) => {
+        expect(shouldLoadSwaggerUiFromCdn(assetsOnDisk)).toBe(expected);
+    });
+
+    it('finds the installed Swagger UI files on disk', () => {
+        expect(swaggerUiAssetsOnDisk()).toBe(true);
     });
 
     it.each([
@@ -57,15 +64,16 @@ describe('Swagger UI assets', () => {
         expect(apiServers(env).map((server) => server.url)).toEqual(expectedOrder);
     });
 
-    it('on Vercel, redirects every Swagger UI asset to the CDN and allows that CDN in the Content-Security-Policy', async () => {
+    it('serves every Swagger UI file directly, on Vercel too, under the strict default script policy', async () => {
         app = await createDocsApp(true);
 
         for (const asset of SWAGGER_UI_ASSETS) {
-            const response = await request(app.getHttpServer()).get(`/docs/${asset}`).expect(302);
-            expect(response.headers.location).toBe(`${CDN_BASE}/${asset}`);
+            const response = await request(app.getHttpServer()).get(`/docs/${asset}`).expect(200);
+            expect(Number(response.headers['content-length'])).toBeGreaterThan(0);
         }
         const page = await request(app.getHttpServer()).get('/docs').expect(200);
-        expect(page.headers['content-security-policy']).toContain(`script-src 'self' ${SWAGGER_UI_CDN_ORIGIN}`);
+        expect(page.text).not.toContain(SWAGGER_UI_CDN_ORIGIN);
+        expect(page.headers['content-security-policy']).toContain("script-src 'self';");
 
         const spec = await request(app.getHttpServer()).get('/docs-json').expect(200);
         expect((spec.body.servers as Array<{ url: string }>).map((server) => server.url)).toEqual([
@@ -74,13 +82,18 @@ describe('Swagger UI assets', () => {
         ]);
     });
 
-    it('elsewhere, serves the bundled assets and keeps the strict default script policy', async () => {
+    it('redirects to the CDN, and allows it in the Content-Security-Policy, when the Swagger UI files are missing', async () => {
+        const realExistsSync = fs.existsSync;
+        jest.spyOn(fs, 'existsSync').mockImplementation((path) =>
+            String(path).includes('swagger-ui-dist') ? false : realExistsSync(path),
+        );
         app = await createDocsApp(false);
 
-        await request(app.getHttpServer()).get('/docs/swagger-ui-bundle.js').expect(200);
+        for (const asset of SWAGGER_UI_ASSETS) {
+            const response = await request(app.getHttpServer()).get(`/docs/${asset}`).expect(302);
+            expect(response.headers.location).toBe(`${CDN_BASE}/${asset}`);
+        }
         const page = await request(app.getHttpServer()).get('/docs').expect(200);
-
-        expect(page.text).not.toContain(SWAGGER_UI_CDN_ORIGIN);
-        expect(page.headers['content-security-policy']).toContain("script-src 'self';");
+        expect(page.headers['content-security-policy']).toContain(`script-src 'self' ${SWAGGER_UI_CDN_ORIGIN}`);
     });
 });
