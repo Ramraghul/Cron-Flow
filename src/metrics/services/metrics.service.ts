@@ -1,126 +1,115 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { ExecutionStatus, Prisma, TriggerType, WorkflowStatus } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
+import { toExecutionSummary } from '../../executions/execution.mapper';
+import { ExecutionStatsDto, MetricsSummaryDto, WorkflowMetricsDto } from '../dto/metrics-response.dto';
 
+const RECENT_EXECUTIONS_LIMIT = 10;
+const RECENT_WINDOW_DAYS = 30;
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+function zeroCounts<TKey extends string>(keys: readonly TKey[]): Record<TKey, number> {
+    return Object.fromEntries(keys.map((key) => [key, 0])) as Record<TKey, number>;
+}
+
+/** Aggregates are always scoped to the caller's own workflows. */
 @Injectable()
 export class MetricsService {
     constructor(private readonly prisma: PrismaService) {}
 
-    async getGlobalMetrics() {
-        const [
-            totalUsers,
-            totalWorkflows,
-            activeWorkflows,
-            pausedWorkflows,
-            totalExecutions,
-            executionsByStatus,
-            executionsByTrigger,
-            recentExecutions,
-            avgDuration,
-        ] = await Promise.all([
-            this.prisma.user.count(),
-            this.prisma.workflow.count(),
-            this.prisma.workflow.count({ where: { status: 'ACTIVE' } }),
-            this.prisma.workflow.count({ where: { status: 'PAUSED' } }),
-            this.prisma.execution.count(),
-            this.prisma.execution.groupBy({
-                by: ['status'],
-                _count: { status: true },
-            }),
-            this.prisma.execution.groupBy({
-                by: ['triggerType'],
-                _count: { triggerType: true },
-            }),
+    async getSummary(userId: string): Promise<MetricsSummaryDto> {
+        const [workflowGroups, executions, recentExecutions] = await Promise.all([
+            this.prisma.workflow.groupBy({ by: ['status'], where: { userId }, _count: { _all: true } }),
+            this.getExecutionStats({ workflow: { userId } }, Prisma.sql`w."userId" = ${userId}`),
             this.prisma.execution.findMany({
-                take: 10,
+                where: { workflow: { userId } },
                 orderBy: { createdAt: 'desc' },
-                select: {
-                    id: true,
-                    status: true,
-                    triggerType: true,
-                    startedAt: true,
-                    completedAt: true,
-                    createdAt: true,
-                    workflow: {
-                        select: { name: true },
-                    },
-                },
+                take: RECENT_EXECUTIONS_LIMIT,
+                include: { workflow: { select: { name: true } } },
             }),
-            // Average execution duration (completed ones)
-            this.prisma.$queryRaw<[{ avg_ms: number }]>`
-                SELECT AVG(EXTRACT(EPOCH FROM ("completedAt" - "startedAt")) * 1000) AS avg_ms
-                FROM "Execution"
-                WHERE "completedAt" IS NOT NULL AND "startedAt" IS NOT NULL
-            `,
         ]);
 
-        const byStatus: Record<string, number> = {};
-        executionsByStatus.forEach((r) => { byStatus[r.status] = r._count.status; });
-
-        const byTrigger: Record<string, number> = {};
-        executionsByTrigger.forEach((r) => { byTrigger[r.triggerType] = r._count.triggerType; });
-
-        const successRate = totalExecutions > 0
-            ? (((byStatus['SUCCESS'] || 0) / totalExecutions) * 100).toFixed(1)
-            : '0.0';
+        const workflowCounts = zeroCounts(Object.values(WorkflowStatus));
+        for (const group of workflowGroups) {
+            workflowCounts[group.status] = group._count._all;
+        }
 
         return {
-            timestamp: new Date().toISOString(),
-            users: { total: totalUsers },
+            generatedAt: new Date(),
             workflows: {
-                total: totalWorkflows,
-                active: activeWorkflows,
-                paused: pausedWorkflows,
+                total: workflowCounts.ACTIVE + workflowCounts.PAUSED,
+                active: workflowCounts.ACTIVE,
+                paused: workflowCounts.PAUSED,
             },
-            executions: {
-                total: totalExecutions,
-                byStatus,
-                byTrigger,
-                successRate: `${successRate}%`,
-                avgDurationMs: Math.round(avgDuration[0]?.avg_ms ?? 0),
-            },
-            recentExecutions,
+            executions,
+            recentExecutions: recentExecutions.map((execution) => ({
+                ...toExecutionSummary(execution),
+                workflowName: execution.workflow.name,
+            })),
         };
     }
 
-    async getWorkflowMetrics(workflowId: string, userId: string) {
-        const workflow = await this.prisma.workflow.findFirst({
-            where: { id: workflowId, userId },
-        });
-        if (!workflow) return null;
+    async getWorkflowMetrics(userId: string, workflowId: string): Promise<WorkflowMetricsDto> {
+        const workflow = await this.prisma.workflow.findFirst({ where: { id: workflowId, userId } });
+        if (!workflow) {
+            throw new NotFoundException(`Workflow ${workflowId} not found`);
+        }
 
-        const [total, byStatus, last30d] = await Promise.all([
-            this.prisma.execution.count({ where: { workflowId } }),
-            this.prisma.execution.groupBy({
-                by: ['status'],
-                where: { workflowId },
-                _count: { status: true },
-            }),
+        const [executions, executionsLast30Days] = await Promise.all([
+            this.getExecutionStats({ workflowId }, Prisma.sql`e."workflowId" = ${workflowId}`),
             this.prisma.execution.count({
-                where: {
-                    workflowId,
-                    createdAt: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) },
-                },
+                where: { workflowId, createdAt: { gte: new Date(Date.now() - RECENT_WINDOW_DAYS * MS_PER_DAY) } },
             }),
         ]);
 
-        const statusMap: Record<string, number> = {};
-        byStatus.forEach((r) => { statusMap[r.status] = r._count.status; });
-
         return {
-            workflowId,
+            workflowId: workflow.id,
             name: workflow.name,
             status: workflow.status,
             cronExpression: workflow.cronExpression,
-            executions: { total, byStatus: statusMap, last30Days: last30d },
+            timezone: workflow.timezone,
+            executions,
+            executionsLast30Days,
         };
     }
 
-    async health() {
-        try {
-            await this.prisma.$queryRaw`SELECT 1`;
-            return { status: 'ok', db: 'connected', timestamp: new Date().toISOString() };
-        } catch {
-            return { status: 'error', db: 'disconnected', timestamp: new Date().toISOString() };
+    /**
+     * @param where Prisma filter for the counts
+     * @param durationScope the same filter as SQL, for the duration average Prisma cannot express
+     */
+    private async getExecutionStats(
+        where: Prisma.ExecutionWhereInput,
+        durationScope: Prisma.Sql,
+    ): Promise<ExecutionStatsDto> {
+        const [statusGroups, triggerGroups, durationRows] = await Promise.all([
+            this.prisma.execution.groupBy({ by: ['status'], where, _count: { _all: true } }),
+            this.prisma.execution.groupBy({ by: ['triggerType'], where, _count: { _all: true } }),
+            this.prisma.$queryRaw<{ avg_ms: number | null }[]>`
+                SELECT AVG(EXTRACT(EPOCH FROM (e."completedAt" - e."startedAt")) * 1000)::float8 AS avg_ms
+                FROM "Execution" e
+                JOIN "Workflow" w ON w."id" = e."workflowId"
+                WHERE ${durationScope} AND e."startedAt" IS NOT NULL AND e."completedAt" IS NOT NULL`,
+        ]);
+
+        const byStatus = zeroCounts(Object.values(ExecutionStatus));
+        for (const group of statusGroups) {
+            byStatus[group.status] = group._count._all;
         }
+
+        const byTrigger = zeroCounts(Object.values(TriggerType));
+        for (const group of triggerGroups) {
+            byTrigger[group.triggerType] = group._count._all;
+        }
+
+        const finished = byStatus.SUCCESS + byStatus.FAILED;
+        const averageMs = durationRows[0]?.avg_ms;
+
+        return {
+            total: Object.values(byStatus).reduce((sum, count) => sum + count, 0),
+            byStatus,
+            byTrigger,
+            successRatePercent: finished > 0 ? Math.round((byStatus.SUCCESS / finished) * 1000) / 10 : null,
+            avgDurationMs: averageMs == null ? null : Math.round(averageMs),
+        };
     }
 }

@@ -1,0 +1,3136 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/api/v1/auth/register": {
+      "post": {
+        "description": "Creates a user and returns an access token, so the client is signed in immediately.",
+        "operationId": "Auth_register",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed — `message` lists every problem",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "An account with this email already exists",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded — retry after the window resets",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Register a new account",
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "description": "Exchanges email and password for a JWT access token.",
+        "operationId": "Auth_login",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed — `message` lists every problem",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid email or password",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded — retry after the window resets",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Log in",
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/api/v1/auth/me": {
+      "get": {
+        "description": "Handy for checking that a token or API key works.",
+        "operationId": "Auth_me",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CurrentUserDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or expired credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded — retry after the window resets",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          },
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Get the authenticated user",
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/api/v1/api-keys": {
+      "post": {
+        "description": "Returns the full key **once** — only a SHA-256 hash is stored, so it cannot be recovered later. Send it in the `x-api-key` header to call workflow, execution, scheduler and metrics endpoints.",
+        "operationId": "ApiKeys_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateApiKeyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedApiKeyDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed — `message` lists every problem",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or expired credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded — retry after the window resets",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Create an API key",
+        "tags": [
+          "API Keys"
+        ]
+      },
+      "get": {
+        "description": "Keys are masked; only the display prefix is returned.",
+        "operationId": "ApiKeys_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ApiKeyDto"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or expired credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded — retry after the window resets",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "List your API keys",
+        "tags": [
+          "API Keys"
+        ]
+      }
+    },
+    "/api/v1/api-keys/{id}": {
+      "delete": {
+        "description": "The key stops working immediately.",
+        "operationId": "ApiKeys_revoke",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "API key id",
+            "schema": {
+              "example": "cm0x9c2k10001abcd8f7g6h5j",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Key revoked"
+          },
+          "401": {
+            "description": "Missing, invalid or expired credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found, or not owned by the caller",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded — retry after the window resets",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Revoke an API key",
+        "tags": [
+          "API Keys"
+        ]
+      }
+    },
+    "/api/v1/workflows": {
+      "post": {
+        "description": "Validates the cron expression, timezone and every step config, saves the workflow, and registers its cron schedule. New workflows start `ACTIVE`. If the scheduler (Redis) is unavailable nothing is saved.",
+        "operationId": "Workflows_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateWorkflowDto"
+              },
+              "examples": {
+                "httpPipeline": {
+                  "summary": "HTTP → delay → HTTP",
+                  "value": {
+                    "name": "Nightly data sync",
+                    "description": "Warms the reporting cache, waits, then triggers the export",
+                    "cronExpression": "0 2 * * *",
+                    "timezone": "Europe/London",
+                    "steps": [
+                      {
+                        "stepOrder": 1,
+                        "type": "HTTP",
+                        "config": {
+                          "url": "https://httpbin.org/get",
+                          "method": "GET"
+                        }
+                      },
+                      {
+                        "stepOrder": 2,
+                        "type": "DELAY",
+                        "config": {
+                          "duration": 2000
+                        }
+                      },
+                      {
+                        "stepOrder": 3,
+                        "type": "HTTP",
+                        "config": {
+                          "url": "https://httpbin.org/post",
+                          "method": "POST",
+                          "headers": {
+                            "X-Source": "cronflow"
+                          },
+                          "body": {
+                            "report": "daily"
+                          }
+                        },
+                        "retryCount": 5,
+                        "timeout": 10000
+                      }
+                    ]
+                  }
+                },
+                "minimal": {
+                  "summary": "Single health ping every 5 minutes",
+                  "value": {
+                    "name": "Uptime ping",
+                    "cronExpression": "*/5 * * * *",
+                    "steps": [
+                      {
+                        "stepOrder": 1,
+                        "type": "HTTP",
+                        "config": {
+                          "url": "https://httpbin.org/status/200"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed — e.g. invalid cron, duplicate stepOrder, HTTP step without url",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or expired credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded — retry after the window resets",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Scheduler (Redis) unavailable — the workflow was not created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          },
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Create a workflow",
+        "tags": [
+          "Workflows"
+        ]
+      },
+      "get": {
+        "description": "Paginated list of your workflows, filterable by status and a text search.",
+        "operationId": "Workflows_list",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "1-based page number",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "example": 1,
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/Object"
+                }
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Items per page",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "example": 20,
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/Object"
+                }
+              ]
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "description": "Only return workflows with this status",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ACTIVE",
+                "PAUSED"
+              ]
+            }
+          },
+          {
+            "name": "search",
+            "required": false,
+            "in": "query",
+            "description": "Case-insensitive match against name or description",
+            "schema": {
+              "maxLength": 100,
+              "example": "sync",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sortBy",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "createdAt",
+              "type": "string",
+              "enum": [
+                "createdAt",
+                "updatedAt",
+                "name"
+              ]
+            }
+          },
+          {
+            "name": "sortOrder",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "desc",
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedWorkflowsResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or expired credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded — retry after the window resets",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          },
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "List workflows",
+        "tags": [
+          "Workflows"
+        ]
+      }
+    },
+    "/api/v1/workflows/{id}": {
+      "get": {
+        "description": "Includes its steps and webhook token.",
+        "operationId": "Workflows_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Workflow id",
+            "schema": {
+              "example": "cm0x8b1f40001abcdlkj2h3g4",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or expired credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found, or not owned by the caller",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded — retry after the window resets",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          },
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Get a workflow",
+        "tags": [
+          "Workflows"
+        ]
+      },
+      "patch": {
+        "description": "Partial update. Sending `steps` replaces the entire step list (past executions keep their history). Changing `cronExpression` or `timezone` reschedules an active workflow immediately.",
+        "operationId": "Workflows_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Workflow id",
+            "schema": {
+              "example": "cm0x8b1f40001abcdlkj2h3g4",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateWorkflowDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed, or the body contains no fields to update",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or expired credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found, or not owned by the caller",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded — retry after the window resets",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A dependency (PostgreSQL or Redis) is temporarily unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          },
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Update a workflow",
+        "tags": [
+          "Workflows"
+        ]
+      },
+      "delete": {
+        "description": "Removes its schedule and all of its execution history.",
+        "operationId": "Workflows_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Workflow id",
+            "schema": {
+              "example": "cm0x8b1f40001abcdlkj2h3g4",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Workflow deleted"
+          },
+          "401": {
+            "description": "Missing, invalid or expired credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found, or not owned by the caller",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded — retry after the window resets",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A dependency (PostgreSQL or Redis) is temporarily unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          },
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Delete a workflow",
+        "tags": [
+          "Workflows"
+        ]
+      }
+    },
+    "/api/v1/workflows/{id}/pause": {
+      "patch": {
+        "description": "Stops scheduled and webhook runs. Manual runs are still allowed.",
+        "operationId": "Workflows_pause",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Workflow id",
+            "schema": {
+              "example": "cm0x8b1f40001abcdlkj2h3g4",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or expired credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found, or not owned by the caller",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Workflow is already paused",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded — retry after the window resets",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A dependency (PostgreSQL or Redis) is temporarily unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          },
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Pause a workflow",
+        "tags": [
+          "Workflows"
+        ]
+      }
+    },
+    "/api/v1/workflows/{id}/resume": {
+      "patch": {
+        "description": "Re-registers its cron schedule.",
+        "operationId": "Workflows_resume",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Workflow id",
+            "schema": {
+              "example": "cm0x8b1f40001abcdlkj2h3g4",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or expired credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found, or not owned by the caller",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Workflow is already active",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded — retry after the window resets",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A dependency (PostgreSQL or Redis) is temporarily unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          },
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Resume a paused workflow",
+        "tags": [
+          "Workflows"
+        ]
+      }
+    },
+    "/api/v1/scheduler/jobs": {
+      "get": {
+        "description": "Live scheduler state from Redis for each of your ACTIVE workflows, including the next run time.",
+        "operationId": "Scheduler_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduleListResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or expired credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded — retry after the window resets",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A dependency (PostgreSQL or Redis) is temporarily unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          },
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "List cron schedules",
+        "tags": [
+          "Scheduler"
+        ]
+      }
+    },
+    "/api/v1/workflows/{workflowId}/executions": {
+      "post": {
+        "description": "Creates a `PENDING` execution and queues it for a worker, returning **202 Accepted** immediately. Poll `statusUrl` to follow progress. Paused workflows can still be run manually.",
+        "operationId": "WorkflowExecutions_trigger",
+        "parameters": [
+          {
+            "name": "workflowId",
+            "required": true,
+            "in": "path",
+            "description": "Workflow id",
+            "schema": {
+              "example": "cm0x8b1f40001abcdlkj2h3g4",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExecutionAcceptedDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or expired credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found, or not owned by the caller",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded — retry after the window resets",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Job queue (Redis) unavailable — the execution is recorded as FAILED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          },
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Run a workflow now",
+        "tags": [
+          "Executions"
+        ]
+      },
+      "get": {
+        "description": "Newest first, filterable by status and trigger.",
+        "operationId": "WorkflowExecutions_list",
+        "parameters": [
+          {
+            "name": "workflowId",
+            "required": true,
+            "in": "path",
+            "description": "Workflow id",
+            "schema": {
+              "example": "cm0x8b1f40001abcdlkj2h3g4",
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "1-based page number",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "example": 1,
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/Object"
+                }
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Items per page",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "example": 20,
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/Object"
+                }
+              ]
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "description": "Only return executions with this status",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "PENDING",
+                "RUNNING",
+                "SUCCESS",
+                "FAILED",
+                "SKIPPED"
+              ]
+            }
+          },
+          {
+            "name": "triggerType",
+            "required": false,
+            "in": "query",
+            "description": "Only return executions started this way",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "MANUAL",
+                "CRON",
+                "WEBHOOK"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedExecutionsResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or expired credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found, or not owned by the caller",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded — retry after the window resets",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          },
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "List executions of a workflow",
+        "tags": [
+          "Executions"
+        ]
+      }
+    },
+    "/api/v1/executions/{id}": {
+      "get": {
+        "description": "Status, timings and a per-step log (attempts, output summary, errors).",
+        "operationId": "Executions_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Execution id",
+            "schema": {
+              "example": "cm0xb2c3d0002abcd4e5f6g7h",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExecutionDetailsDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or expired credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found, or not owned by the caller",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded — retry after the window resets",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          },
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Get an execution",
+        "tags": [
+          "Executions"
+        ]
+      }
+    },
+    "/api/v1/webhooks/{token}/trigger": {
+      "post": {
+        "description": "No auth header needed — the unguessable token in the URL is the credential (the workflow’s `webhookToken`). Any JSON object sent as the body is stored on the execution as `triggerPayload`.",
+        "operationId": "Webhooks_trigger",
+        "parameters": [
+          {
+            "name": "token",
+            "required": true,
+            "in": "path",
+            "description": "The workflow’s webhookToken",
+            "schema": {
+              "example": "k3Jd9sQ2mVx7LpA0bR4tYw8eZc1uN6hG",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "example": {
+                  "event": "deploy.finished",
+                  "ref": "main"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExecutionAcceptedDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No workflow has this webhook token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The workflow is paused",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded — retry after the window resets",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A dependency (PostgreSQL or Redis) is temporarily unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Trigger a workflow from an external system",
+        "tags": [
+          "Webhooks"
+        ]
+      }
+    },
+    "/api/v1/metrics": {
+      "get": {
+        "description": "Workflow counts, execution totals by status and trigger, success rate, average duration and recent runs.",
+        "operationId": "Metrics_summary",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetricsSummaryDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or expired credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded — retry after the window resets",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          },
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Dashboard metrics",
+        "tags": [
+          "Metrics"
+        ]
+      }
+    },
+    "/api/v1/metrics/workflows/{workflowId}": {
+      "get": {
+        "operationId": "Metrics_workflow",
+        "parameters": [
+          {
+            "name": "workflowId",
+            "required": true,
+            "in": "path",
+            "description": "Workflow id",
+            "schema": {
+              "example": "cm0x8b1f40001abcdlkj2h3g4",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowMetricsDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or expired credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found, or not owned by the caller",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded — retry after the window resets",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          },
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Metrics for one workflow",
+        "tags": [
+          "Metrics"
+        ]
+      }
+    },
+    "/health/live": {
+      "get": {
+        "description": "Returns 200 while the process is up. Does not check dependencies — use it to decide when to restart.",
+        "operationId": "Health_live",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LivenessResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Liveness probe",
+        "tags": [
+          "Health"
+        ]
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "description": "Checks PostgreSQL and Redis. Returns 503 if either is unreachable — use it to decide whether to route traffic.",
+        "operationId": "Health_ready",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadinessResponseDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A dependency is down",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadinessResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Readiness probe",
+        "tags": [
+          "Health"
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "CronFlow API",
+    "description": "CronFlow runs multi-step workflows — HTTP calls and delays — on a **cron schedule**, from a **webhook**, or **on demand**.\n\n### Quick start\n1. `POST /api/v1/auth/register` and copy the `accessToken`\n2. Click **Authorize**, paste the token into **JWT**\n3. `POST /api/v1/workflows` to create a workflow (see the request examples)\n4. `POST /api/v1/workflows/{workflowId}/executions` to run it now, then poll `GET /api/v1/executions/{id}`\n\n### Authentication\n| Method | Header | Obtain from |\n| --- | --- | --- |\n| JWT | `Authorization: Bearer <accessToken>` | `POST /api/v1/auth/login` |\n| API key | `x-api-key: cf_…` | `POST /api/v1/api-keys` |\n\n### Errors\nEvery error response uses the same envelope (`ErrorResponseDto`). Its `requestId` matches the\n`X-Request-Id` response header and the server logs.\n\n### Rate limiting\nRequests are limited per client IP (100/minute by default; 10/minute for register and login).\nExceeding the limit returns `429 Too Many Requests`.",
+    "version": "3.0.0",
+    "contact": {}
+  },
+  "tags": [
+    {
+      "name": "Auth",
+      "description": "Register, log in, and inspect the current identity"
+    },
+    {
+      "name": "Workflows",
+      "description": "Create and manage scheduled workflows"
+    },
+    {
+      "name": "Executions",
+      "description": "Run workflows on demand and inspect run history"
+    },
+    {
+      "name": "Webhooks",
+      "description": "Trigger workflows from external systems"
+    },
+    {
+      "name": "Scheduler",
+      "description": "Live cron schedule state"
+    },
+    {
+      "name": "Metrics",
+      "description": "Aggregated execution statistics"
+    },
+    {
+      "name": "API Keys",
+      "description": "Credentials for scripts and CI"
+    },
+    {
+      "name": "Health",
+      "description": "Liveness and readiness probes"
+    }
+  ],
+  "servers": [],
+  "components": {
+    "securitySchemes": {
+      "JWT": {
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "type": "http",
+        "description": "Access token from POST /api/v1/auth/login"
+      },
+      "ApiKey": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-api-key",
+        "description": "API key from POST /api/v1/api-keys"
+      }
+    },
+    "schemas": {
+      "ErrorResponseDto": {
+        "type": "object",
+        "properties": {
+          "statusCode": {
+            "type": "number",
+            "example": 400
+          },
+          "error": {
+            "type": "string",
+            "example": "Bad Request",
+            "description": "HTTP reason phrase"
+          },
+          "message": {
+            "description": "A single message, or one message per failed validation rule",
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            ],
+            "example": [
+              "cronExpression must be a valid 5-field cron expression (minute hour day-of-month month day-of-week)"
+            ]
+          },
+          "path": {
+            "type": "string",
+            "example": "/api/v1/workflows"
+          },
+          "method": {
+            "type": "string",
+            "example": "POST"
+          },
+          "timestamp": {
+            "type": "string",
+            "example": "2026-09-14T10:00:00.000Z",
+            "format": "date-time"
+          },
+          "requestId": {
+            "type": "string",
+            "example": "5f0e7c1a-3b8e-4d7a-9c2f-1e6b8a4d2c10",
+            "description": "Correlates this response with server logs (also sent as the X-Request-Id header)"
+          }
+        },
+        "required": [
+          "statusCode",
+          "error",
+          "message",
+          "path",
+          "method",
+          "timestamp"
+        ]
+      },
+      "RegisterDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "example": "ada@example.com",
+            "maxLength": 254,
+            "description": "Stored lower-cased"
+          },
+          "password": {
+            "type": "string",
+            "example": "correct-horse-battery-staple",
+            "minLength": 8,
+            "description": "At least 8 characters and at most 72 bytes"
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ]
+      },
+      "AuthUserDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "cm0x8b1f40000abcdlkj2h3g4"
+          },
+          "email": {
+            "type": "string",
+            "example": "ada@example.com"
+          }
+        },
+        "required": [
+          "id",
+          "email"
+        ]
+      },
+      "AuthResponseDto": {
+        "type": "object",
+        "properties": {
+          "accessToken": {
+            "type": "string",
+            "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjbTB4OGIxZjQwMDAwIn0.signature"
+          },
+          "tokenType": {
+            "type": "string",
+            "example": "Bearer",
+            "enum": [
+              "Bearer"
+            ]
+          },
+          "expiresIn": {
+            "type": "number",
+            "example": 86400,
+            "description": "Seconds until the access token expires"
+          },
+          "user": {
+            "$ref": "#/components/schemas/AuthUserDto"
+          }
+        },
+        "required": [
+          "accessToken",
+          "tokenType",
+          "expiresIn",
+          "user"
+        ]
+      },
+      "LoginDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "example": "ada@example.com"
+          },
+          "password": {
+            "type": "string",
+            "example": "correct-horse-battery-staple"
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ]
+      },
+      "CurrentUserDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "cm0x8b1f40000abcdlkj2h3g4"
+          },
+          "email": {
+            "type": "string",
+            "example": "ada@example.com"
+          },
+          "authMethod": {
+            "type": "string",
+            "enum": [
+              "jwt",
+              "api-key"
+            ],
+            "example": "jwt",
+            "description": "How this request was authenticated"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "authMethod"
+        ]
+      },
+      "CreateApiKeyDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "GitHub Actions deploy hook",
+            "description": "Human-readable label",
+            "maxLength": 80
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "CreatedApiKeyDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "cm0x9c2k10001abcd8f7g6h5j"
+          },
+          "name": {
+            "type": "string",
+            "example": "GitHub Actions deploy hook"
+          },
+          "keyPrefix": {
+            "type": "string",
+            "example": "cf_Q2hhbmdl",
+            "description": "First characters of the key, for identification only"
+          },
+          "lastUsedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "example": null
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-09-14T10:00:00.000Z"
+          },
+          "key": {
+            "type": "string",
+            "example": "cf_Q2hhbmdlTWUtVGhpcy1Jcy1Bbi1FeGFtcGxlLUtleQ",
+            "description": "The full API key. Returned only once — store it securely."
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "keyPrefix",
+          "lastUsedAt",
+          "createdAt",
+          "key"
+        ]
+      },
+      "ApiKeyDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "cm0x9c2k10001abcd8f7g6h5j"
+          },
+          "name": {
+            "type": "string",
+            "example": "GitHub Actions deploy hook"
+          },
+          "keyPrefix": {
+            "type": "string",
+            "example": "cf_Q2hhbmdl",
+            "description": "First characters of the key, for identification only"
+          },
+          "lastUsedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "example": null
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-09-14T10:00:00.000Z"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "keyPrefix",
+          "lastUsedAt",
+          "createdAt"
+        ]
+      },
+      "HttpStepConfigDto": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "example": "https://httpbin.org/post",
+            "description": "Absolute http(s) URL to call"
+          },
+          "method": {
+            "type": "string",
+            "enum": [
+              "GET",
+              "POST",
+              "PUT",
+              "PATCH",
+              "DELETE",
+              "HEAD"
+            ],
+            "default": "GET"
+          },
+          "headers": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "example": {
+              "Authorization": "Bearer <token>"
+            },
+            "description": "Request headers"
+          },
+          "body": {
+            "type": "object",
+            "description": "JSON body, sent with POST, PUT, PATCH and DELETE requests",
+            "example": {
+              "event": "nightly-sync"
+            }
+          }
+        },
+        "required": [
+          "url"
+        ]
+      },
+      "DelayStepConfigDto": {
+        "type": "object",
+        "properties": {
+          "duration": {
+            "type": "number",
+            "example": 2000,
+            "minimum": 1,
+            "maximum": 300000,
+            "description": "How long to pause, in milliseconds"
+          }
+        },
+        "required": [
+          "duration"
+        ]
+      },
+      "WorkflowStepDto": {
+        "type": "object",
+        "properties": {
+          "stepOrder": {
+            "type": "number",
+            "example": 1,
+            "minimum": 1,
+            "maximum": 1000,
+            "description": "Execution order. Must be unique within the workflow."
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "HTTP",
+              "DELAY"
+            ],
+            "example": "HTTP"
+          },
+          "config": {
+            "description": "Shape depends on `type` — HTTP: `{ url, method?, headers?, body? }` · DELAY: `{ duration }`",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/HttpStepConfigDto"
+              },
+              {
+                "$ref": "#/components/schemas/DelayStepConfigDto"
+              }
+            ]
+          },
+          "retryCount": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10,
+            "default": 3,
+            "description": "HTTP steps: retries after a transient failure (exponential backoff starting at 1s)"
+          },
+          "timeout": {
+            "type": "number",
+            "minimum": 1000,
+            "maximum": 300000,
+            "default": 30000,
+            "description": "HTTP steps: per-attempt timeout in milliseconds"
+          }
+        },
+        "required": [
+          "stepOrder",
+          "type",
+          "config"
+        ]
+      },
+      "CreateWorkflowDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "Nightly data sync",
+            "maxLength": 120
+          },
+          "description": {
+            "type": "string",
+            "example": "Warms the reporting cache, waits, then triggers the export",
+            "maxLength": 500
+          },
+          "cronExpression": {
+            "type": "string",
+            "example": "0 2 * * *",
+            "description": "Standard 5-field cron expression: minute hour day-of-month month day-of-week"
+          },
+          "timezone": {
+            "type": "string",
+            "example": "Europe/London",
+            "default": "UTC",
+            "description": "IANA timezone the cron expression is evaluated in"
+          },
+          "steps": {
+            "minItems": 1,
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkflowStepDto"
+            }
+          }
+        },
+        "required": [
+          "name",
+          "cronExpression",
+          "steps"
+        ]
+      },
+      "WorkflowStepResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "cm0xa1b2c0002abcd3e4f5g6h"
+          },
+          "stepOrder": {
+            "type": "number",
+            "example": 1
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "HTTP",
+              "DELAY"
+            ],
+            "example": "HTTP"
+          },
+          "config": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/HttpStepConfigDto"
+              },
+              {
+                "$ref": "#/components/schemas/DelayStepConfigDto"
+              }
+            ],
+            "example": {
+              "url": "https://httpbin.org/post",
+              "method": "POST"
+            }
+          },
+          "retryCount": {
+            "type": "number",
+            "example": 3
+          },
+          "timeout": {
+            "type": "number",
+            "example": 30000,
+            "description": "Per-attempt timeout in milliseconds"
+          }
+        },
+        "required": [
+          "id",
+          "stepOrder",
+          "type",
+          "config",
+          "retryCount",
+          "timeout"
+        ]
+      },
+      "WorkflowResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "cm0x8b1f40001abcdlkj2h3g4"
+          },
+          "name": {
+            "type": "string",
+            "example": "Nightly data sync"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true,
+            "example": "Warms the reporting cache, waits, then triggers the export"
+          },
+          "cronExpression": {
+            "type": "string",
+            "example": "0 2 * * *"
+          },
+          "timezone": {
+            "type": "string",
+            "example": "UTC"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "PAUSED"
+            ],
+            "example": "ACTIVE"
+          },
+          "nextRunAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "example": "2026-09-15T02:00:00.000Z",
+            "description": "Next scheduled run; null while the workflow is paused"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-09-14T10:00:00.000Z"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-09-14T10:00:00.000Z"
+          },
+          "webhookToken": {
+            "type": "string",
+            "example": "k3Jd9sQ2mVx7LpA0bR4tYw8eZc1uN6hG",
+            "description": "Secret for `POST /api/v1/webhooks/{token}/trigger`. Treat it like a password."
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkflowStepResponseDto"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description",
+          "cronExpression",
+          "timezone",
+          "status",
+          "nextRunAt",
+          "createdAt",
+          "updatedAt",
+          "webhookToken",
+          "steps"
+        ]
+      },
+      "Object": {
+        "type": "object",
+        "properties": {}
+      },
+      "WorkflowSummaryDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "cm0x8b1f40001abcdlkj2h3g4"
+          },
+          "name": {
+            "type": "string",
+            "example": "Nightly data sync"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true,
+            "example": "Warms the reporting cache, waits, then triggers the export"
+          },
+          "cronExpression": {
+            "type": "string",
+            "example": "0 2 * * *"
+          },
+          "timezone": {
+            "type": "string",
+            "example": "UTC"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "PAUSED"
+            ],
+            "example": "ACTIVE"
+          },
+          "nextRunAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "example": "2026-09-15T02:00:00.000Z",
+            "description": "Next scheduled run; null while the workflow is paused"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-09-14T10:00:00.000Z"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-09-14T10:00:00.000Z"
+          },
+          "stepCount": {
+            "type": "number",
+            "example": 2
+          },
+          "executionCount": {
+            "type": "number",
+            "example": 14
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description",
+          "cronExpression",
+          "timezone",
+          "status",
+          "nextRunAt",
+          "createdAt",
+          "updatedAt",
+          "stepCount",
+          "executionCount"
+        ]
+      },
+      "PaginationMetaDto": {
+        "type": "object",
+        "properties": {
+          "page": {
+            "type": "number",
+            "example": 1
+          },
+          "limit": {
+            "type": "number",
+            "example": 20
+          },
+          "totalItems": {
+            "type": "number",
+            "example": 42,
+            "description": "Total items matching the filters"
+          },
+          "totalPages": {
+            "type": "number",
+            "example": 3
+          },
+          "hasNextPage": {
+            "type": "boolean",
+            "example": true
+          },
+          "hasPreviousPage": {
+            "type": "boolean",
+            "example": false
+          }
+        },
+        "required": [
+          "page",
+          "limit",
+          "totalItems",
+          "totalPages",
+          "hasNextPage",
+          "hasPreviousPage"
+        ]
+      },
+      "PaginatedWorkflowsResponseDto": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkflowSummaryDto"
+            }
+          },
+          "meta": {
+            "$ref": "#/components/schemas/PaginationMetaDto"
+          }
+        },
+        "required": [
+          "data",
+          "meta"
+        ]
+      },
+      "UpdateWorkflowDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "Nightly data sync",
+            "maxLength": 120
+          },
+          "description": {
+            "type": "string",
+            "example": "Warms the reporting cache, waits, then triggers the export",
+            "maxLength": 500
+          },
+          "cronExpression": {
+            "type": "string",
+            "example": "0 2 * * *",
+            "description": "Standard 5-field cron expression: minute hour day-of-month month day-of-week"
+          },
+          "timezone": {
+            "type": "string",
+            "example": "Europe/London",
+            "default": "UTC",
+            "description": "IANA timezone the cron expression is evaluated in"
+          },
+          "steps": {
+            "minItems": 1,
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkflowStepDto"
+            }
+          }
+        }
+      },
+      "ScheduleDto": {
+        "type": "object",
+        "properties": {
+          "workflowId": {
+            "type": "string",
+            "example": "cm0x8b1f40001abcdlkj2h3g4"
+          },
+          "workflowName": {
+            "type": "string",
+            "example": "Nightly data sync"
+          },
+          "cronExpression": {
+            "type": "string",
+            "example": "0 2 * * *"
+          },
+          "timezone": {
+            "type": "string",
+            "example": "UTC"
+          },
+          "registered": {
+            "type": "boolean",
+            "example": true,
+            "description": "Whether Redis holds a schedule for this workflow. False indicates drift, repaired on the next API start."
+          },
+          "nextRunAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "example": "2026-09-15T02:00:00.000Z"
+          }
+        },
+        "required": [
+          "workflowId",
+          "workflowName",
+          "cronExpression",
+          "timezone",
+          "registered",
+          "nextRunAt"
+        ]
+      },
+      "ScheduleListResponseDto": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ScheduleDto"
+            }
+          }
+        },
+        "required": [
+          "data"
+        ]
+      },
+      "ExecutionAcceptedDto": {
+        "type": "object",
+        "properties": {
+          "executionId": {
+            "type": "string",
+            "example": "cm0xb2c3d0002abcd4e5f6g7h"
+          },
+          "workflowId": {
+            "type": "string",
+            "example": "cm0x8b1f40001abcdlkj2h3g4"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "RUNNING",
+              "SUCCESS",
+              "FAILED",
+              "SKIPPED"
+            ],
+            "example": "PENDING"
+          },
+          "triggerType": {
+            "type": "string",
+            "enum": [
+              "MANUAL",
+              "CRON",
+              "WEBHOOK"
+            ],
+            "example": "MANUAL"
+          },
+          "statusUrl": {
+            "type": "string",
+            "example": "/api/v1/executions/cm0xb2c3d0002abcd4e5f6g7h",
+            "description": "Poll this to follow progress"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-09-14T10:00:00.000Z"
+          }
+        },
+        "required": [
+          "executionId",
+          "workflowId",
+          "status",
+          "triggerType",
+          "statusUrl",
+          "createdAt"
+        ]
+      },
+      "ExecutionSummaryDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "cm0xb2c3d0002abcd4e5f6g7h"
+          },
+          "workflowId": {
+            "type": "string",
+            "example": "cm0x8b1f40001abcdlkj2h3g4"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "RUNNING",
+              "SUCCESS",
+              "FAILED",
+              "SKIPPED"
+            ],
+            "example": "SUCCESS"
+          },
+          "triggerType": {
+            "type": "string",
+            "enum": [
+              "MANUAL",
+              "CRON",
+              "WEBHOOK"
+            ],
+            "example": "MANUAL"
+          },
+          "errorMessage": {
+            "type": "string",
+            "nullable": true,
+            "example": null,
+            "description": "Why the execution failed, if it did"
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "example": "2026-09-14T10:00:00.100Z"
+          },
+          "completedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "example": "2026-09-14T10:00:02.600Z"
+          },
+          "durationMs": {
+            "type": "number",
+            "nullable": true,
+            "example": 2500
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-09-14T10:00:00.000Z"
+          }
+        },
+        "required": [
+          "id",
+          "workflowId",
+          "status",
+          "triggerType",
+          "errorMessage",
+          "startedAt",
+          "completedAt",
+          "durationMs",
+          "createdAt"
+        ]
+      },
+      "PaginatedExecutionsResponseDto": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExecutionSummaryDto"
+            }
+          },
+          "meta": {
+            "$ref": "#/components/schemas/PaginationMetaDto"
+          }
+        },
+        "required": [
+          "data",
+          "meta"
+        ]
+      },
+      "ExecutionStepResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "cm0xc3d4e0003abcd5f6g7h8i"
+          },
+          "stepOrder": {
+            "type": "number",
+            "example": 1
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "HTTP",
+              "DELAY"
+            ],
+            "example": "HTTP"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "RUNNING",
+              "SUCCESS",
+              "FAILED",
+              "SKIPPED"
+            ],
+            "example": "SUCCESS"
+          },
+          "attempts": {
+            "type": "number",
+            "example": 1,
+            "description": "Attempts made, including retries"
+          },
+          "logs": {
+            "type": "string",
+            "nullable": true,
+            "example": "POST https://httpbin.org/post → 200 after 1 attempt(s)"
+          },
+          "errorMessage": {
+            "type": "string",
+            "nullable": true,
+            "example": null
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "example": "2026-09-14T10:00:00.120Z"
+          },
+          "completedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "example": "2026-09-14T10:00:00.480Z"
+          },
+          "durationMs": {
+            "type": "number",
+            "nullable": true,
+            "example": 360
+          }
+        },
+        "required": [
+          "id",
+          "stepOrder",
+          "type",
+          "status",
+          "attempts",
+          "logs",
+          "errorMessage",
+          "startedAt",
+          "completedAt",
+          "durationMs"
+        ]
+      },
+      "ExecutionDetailsDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "cm0xb2c3d0002abcd4e5f6g7h"
+          },
+          "workflowId": {
+            "type": "string",
+            "example": "cm0x8b1f40001abcdlkj2h3g4"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "RUNNING",
+              "SUCCESS",
+              "FAILED",
+              "SKIPPED"
+            ],
+            "example": "SUCCESS"
+          },
+          "triggerType": {
+            "type": "string",
+            "enum": [
+              "MANUAL",
+              "CRON",
+              "WEBHOOK"
+            ],
+            "example": "MANUAL"
+          },
+          "errorMessage": {
+            "type": "string",
+            "nullable": true,
+            "example": null,
+            "description": "Why the execution failed, if it did"
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "example": "2026-09-14T10:00:00.100Z"
+          },
+          "completedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "example": "2026-09-14T10:00:02.600Z"
+          },
+          "durationMs": {
+            "type": "number",
+            "nullable": true,
+            "example": 2500
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-09-14T10:00:00.000Z"
+          },
+          "workflowName": {
+            "type": "string",
+            "example": "Nightly data sync"
+          },
+          "triggerPayload": {
+            "type": "object",
+            "additionalProperties": true,
+            "nullable": true,
+            "example": {
+              "event": "deploy.finished"
+            },
+            "description": "JSON body received by the webhook trigger"
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExecutionStepResponseDto"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "workflowId",
+          "status",
+          "triggerType",
+          "errorMessage",
+          "startedAt",
+          "completedAt",
+          "durationMs",
+          "createdAt",
+          "workflowName",
+          "triggerPayload",
+          "steps"
+        ]
+      },
+      "WorkflowCountsDto": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "number",
+            "example": 5
+          },
+          "active": {
+            "type": "number",
+            "example": 4
+          },
+          "paused": {
+            "type": "number",
+            "example": 1
+          }
+        },
+        "required": [
+          "total",
+          "active",
+          "paused"
+        ]
+      },
+      "ExecutionStatsDto": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "number",
+            "example": 42
+          },
+          "byStatus": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "example": {
+              "PENDING": 0,
+              "RUNNING": 1,
+              "SUCCESS": 38,
+              "FAILED": 3,
+              "SKIPPED": 0
+            }
+          },
+          "byTrigger": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "example": {
+              "MANUAL": 5,
+              "CRON": 35,
+              "WEBHOOK": 2
+            }
+          },
+          "successRatePercent": {
+            "type": "number",
+            "nullable": true,
+            "example": 92.7,
+            "description": "SUCCESS ÷ (SUCCESS + FAILED) × 100, one decimal place. Null until an execution finishes."
+          },
+          "avgDurationMs": {
+            "type": "number",
+            "nullable": true,
+            "example": 1840,
+            "description": "Mean duration of finished executions"
+          }
+        },
+        "required": [
+          "total",
+          "byStatus",
+          "byTrigger",
+          "successRatePercent",
+          "avgDurationMs"
+        ]
+      },
+      "RecentExecutionDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "cm0xb2c3d0002abcd4e5f6g7h"
+          },
+          "workflowId": {
+            "type": "string",
+            "example": "cm0x8b1f40001abcdlkj2h3g4"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "RUNNING",
+              "SUCCESS",
+              "FAILED",
+              "SKIPPED"
+            ],
+            "example": "SUCCESS"
+          },
+          "triggerType": {
+            "type": "string",
+            "enum": [
+              "MANUAL",
+              "CRON",
+              "WEBHOOK"
+            ],
+            "example": "MANUAL"
+          },
+          "errorMessage": {
+            "type": "string",
+            "nullable": true,
+            "example": null,
+            "description": "Why the execution failed, if it did"
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "example": "2026-09-14T10:00:00.100Z"
+          },
+          "completedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "example": "2026-09-14T10:00:02.600Z"
+          },
+          "durationMs": {
+            "type": "number",
+            "nullable": true,
+            "example": 2500
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-09-14T10:00:00.000Z"
+          },
+          "workflowName": {
+            "type": "string",
+            "example": "Nightly data sync"
+          }
+        },
+        "required": [
+          "id",
+          "workflowId",
+          "status",
+          "triggerType",
+          "errorMessage",
+          "startedAt",
+          "completedAt",
+          "durationMs",
+          "createdAt",
+          "workflowName"
+        ]
+      },
+      "MetricsSummaryDto": {
+        "type": "object",
+        "properties": {
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-09-14T10:00:00.000Z"
+          },
+          "workflows": {
+            "$ref": "#/components/schemas/WorkflowCountsDto"
+          },
+          "executions": {
+            "$ref": "#/components/schemas/ExecutionStatsDto"
+          },
+          "recentExecutions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RecentExecutionDto"
+            }
+          }
+        },
+        "required": [
+          "generatedAt",
+          "workflows",
+          "executions",
+          "recentExecutions"
+        ]
+      },
+      "WorkflowMetricsDto": {
+        "type": "object",
+        "properties": {
+          "workflowId": {
+            "type": "string",
+            "example": "cm0x8b1f40001abcdlkj2h3g4"
+          },
+          "name": {
+            "type": "string",
+            "example": "Nightly data sync"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "PAUSED"
+            ],
+            "example": "ACTIVE"
+          },
+          "cronExpression": {
+            "type": "string",
+            "example": "0 2 * * *"
+          },
+          "timezone": {
+            "type": "string",
+            "example": "UTC"
+          },
+          "executions": {
+            "$ref": "#/components/schemas/ExecutionStatsDto"
+          },
+          "executionsLast30Days": {
+            "type": "number",
+            "example": 30
+          }
+        },
+        "required": [
+          "workflowId",
+          "name",
+          "status",
+          "cronExpression",
+          "timezone",
+          "executions",
+          "executionsLast30Days"
+        ]
+      },
+      "LivenessResponseDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok"
+            ],
+            "example": "ok"
+          },
+          "uptimeSeconds": {
+            "type": "number",
+            "example": 3600
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-09-14T10:00:00.000Z"
+          }
+        },
+        "required": [
+          "status",
+          "uptimeSeconds",
+          "timestamp"
+        ]
+      },
+      "DependencyCheckDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "up",
+              "down"
+            ],
+            "example": "up"
+          },
+          "latencyMs": {
+            "type": "number",
+            "example": 3
+          }
+        },
+        "required": [
+          "status",
+          "latencyMs"
+        ]
+      },
+      "ReadinessChecksDto": {
+        "type": "object",
+        "properties": {
+          "database": {
+            "$ref": "#/components/schemas/DependencyCheckDto"
+          },
+          "redis": {
+            "$ref": "#/components/schemas/DependencyCheckDto"
+          }
+        },
+        "required": [
+          "database",
+          "redis"
+        ]
+      },
+      "ReadinessResponseDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "error"
+            ],
+            "example": "ok"
+          },
+          "checks": {
+            "$ref": "#/components/schemas/ReadinessChecksDto"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-09-14T10:00:00.000Z"
+          }
+        },
+        "required": [
+          "status",
+          "checks",
+          "timestamp"
+        ]
+      }
+    }
+  }
+}

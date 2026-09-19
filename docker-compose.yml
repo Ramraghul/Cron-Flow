@@ -1,0 +1,93 @@
+# CronFlow local stack.
+#
+#   docker compose up --build             Full stack: API on http://localhost:3000 plus a worker
+#   docker compose up -d postgres redis   Data stores only, for `npm run start:dev` on the host
+#   docker compose down -v                Stop everything and delete the data volumes
+name: cronflow
+
+x-app-image: &app-image
+  build: .
+  image: cronflow:local
+
+x-app-environment: &app-environment
+  NODE_ENV: production
+  DATABASE_URL: postgresql://cronflow:cronflow@postgres:5432/cronflow?schema=public
+  REDIS_URL: redis://redis:6379
+  # Local-only default. Export JWT_SECRET (or put it in .env) for anything shared.
+  JWT_SECRET: ${JWT_SECRET:-local-docker-compose-secret-change-me-0123456789}
+  JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1d}
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+  CORS_ORIGINS: ${CORS_ORIGINS:-*}
+  SWAGGER_ENABLED: "true"
+  HTTP_STEP_ALLOW_PRIVATE_NETWORKS: ${HTTP_STEP_ALLOW_PRIVATE_NETWORKS:-false}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: cronflow
+      POSTGRES_PASSWORD: cronflow
+      POSTGRES_DB: cronflow
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cronflow -d cronflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    # BullMQ requires `noeviction`: evicting keys would silently drop queued jobs.
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    <<: *app-image
+    environment:
+      <<: *app-environment
+      PORT: 3000
+      # Apply migrations on start (Prisma takes an advisory lock, so this is safe with replicas).
+      RUN_MIGRATIONS: "true"
+      # Jobs are processed by the dedicated worker service.
+      WORKER_ENABLED: "false"
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  worker:
+    <<: *app-image
+    command: ["node", "dist/worker.js"]
+    environment:
+      <<: *app-environment
+      WORKER_CONCURRENCY: 5
+    depends_on:
+      # The API applies migrations, so the worker waits until it is healthy.
+      api:
+        condition: service_healthy
+    # Time for in-flight executions to finish on `docker compose stop`.
+    stop_grace_period: 30s
+    # The image's healthcheck probes HTTP, which the worker does not serve.
+    healthcheck:
+      disable: true
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  redis-data:

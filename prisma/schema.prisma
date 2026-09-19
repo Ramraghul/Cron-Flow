@@ -10,6 +10,7 @@ datasource db {
 model User {
   id        String     @id @default(cuid())
   email     String     @unique
+  /// bcrypt hash — never returned by the API.
   password  String
   workflows Workflow[]
   apiKeys   ApiKey[]
@@ -22,33 +23,41 @@ model ApiKey {
   userId     String
   user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   name       String
+  /// SHA-256 hex digest of the raw key. The raw key is shown once at creation and never stored.
   keyHash    String    @unique
+  /// Leading characters of the raw key, safe to display so users can identify a key.
   keyPrefix  String
   lastUsedAt DateTime?
   createdAt  DateTime  @default(now())
-  @@index([keyHash])
+
+  @@index([userId])
 }
 
 model Workflow {
   id             String         @id @default(cuid())
   name           String
   description    String?
+  /// Standard 5-field cron expression.
   cronExpression String
+  /// IANA timezone the cron expression is evaluated in.
+  timezone       String         @default("UTC")
   status         WorkflowStatus @default(ACTIVE)
   webhookToken   String         @unique @default(cuid())
   userId         String
-  user           User           @relation(fields: [userId], references: [id])
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   steps          WorkflowStep[]
   executions     Execution[]
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
+
   @@index([userId, status])
+  @@index([userId, createdAt])
 }
 
 model WorkflowStep {
   id             String          @id @default(cuid())
   workflowId     String
-  workflow       Workflow        @relation(fields: [workflowId], references: [id])
+  workflow       Workflow        @relation(fields: [workflowId], references: [id], onDelete: Cascade)
   stepOrder      Int
   type           StepType
   config         Json
@@ -56,6 +65,8 @@ model WorkflowStep {
   timeout        Int             @default(30000)
   executionSteps ExecutionStep[]
   createdAt      DateTime        @default(now())
+
+  @@unique([workflowId, stepOrder])
 }
 
 enum WorkflowStatus {
@@ -69,25 +80,34 @@ enum StepType {
 }
 
 model Execution {
-  id          String          @id @default(cuid())
-  workflowId  String
-  workflow    Workflow        @relation(fields: [workflowId], references: [id])
-  status      ExecutionStatus @default(PENDING)
-  triggerType TriggerType     @default(MANUAL)
-  startedAt   DateTime?
-  completedAt DateTime?
-  steps       ExecutionStep[]
-  createdAt   DateTime        @default(now())
+  id             String          @id @default(cuid())
+  workflowId     String
+  workflow       Workflow        @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  status         ExecutionStatus @default(PENDING)
+  triggerType    TriggerType     @default(MANUAL)
+  /// JSON body received by the webhook trigger, if any.
+  triggerPayload Json?
+  errorMessage   String?
+  startedAt      DateTime?
+  completedAt    DateTime?
+  steps          ExecutionStep[]
+  createdAt      DateTime        @default(now())
+
+  @@index([workflowId, createdAt])
   @@index([workflowId, status])
   @@index([createdAt])
 }
 
+/// Snapshot of one step within one execution. `stepOrder` and `type` are copied from the
+/// workflow step so history stays intact when a workflow's steps are later replaced.
 model ExecutionStep {
   id             String          @id @default(cuid())
   executionId    String
-  execution      Execution       @relation(fields: [executionId], references: [id])
-  workflowStepId String
-  workflowStep   WorkflowStep    @relation(fields: [workflowStepId], references: [id])
+  execution      Execution       @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  workflowStepId String?
+  workflowStep   WorkflowStep?   @relation(fields: [workflowStepId], references: [id], onDelete: SetNull)
+  stepOrder      Int
+  type           StepType
   status         ExecutionStatus @default(PENDING)
   attempts       Int             @default(0)
   logs           String?
@@ -95,6 +115,8 @@ model ExecutionStep {
   startedAt      DateTime?
   completedAt    DateTime?
   createdAt      DateTime        @default(now())
+
+  @@index([executionId, stepOrder])
 }
 
 enum ExecutionStatus {
@@ -102,6 +124,7 @@ enum ExecutionStatus {
   RUNNING
   SUCCESS
   FAILED
+  SKIPPED
 }
 
 enum TriggerType {

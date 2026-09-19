@@ -1,77 +1,38 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule, ConfigService } from '@nestjs/config';
-import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
-import { ScheduleModule } from '@nestjs/schedule';
+import { ConfigService } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
-import { LoggerModule } from 'nestjs-pino';
-
-import appConfig from './config/app.config';
-import { DatabaseModule } from './database/database.module';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AuthModule } from './auth/auth.module';
-import { WorkflowModule } from './workflows/workflow.module';
-import { QueuesModule } from './queues/queues.module';
+import { AppConfig } from './config/configuration';
+import { CoreModule } from './core/core.module';
+import { ExecutionEngineModule } from './execution-engine/execution-engine.module';
 import { ExecutionsModule } from './executions/executions.module';
-import { ApiKeysModule } from './api-keys/api-keys.module';
+import { HealthModule } from './health/health.module';
+import { MetricsModule } from './metrics/metrics.module';
 import { SchedulerModule } from './scheduler/scheduler.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
-import { MetricsModule } from './metrics/metrics.module';
+import { WorkflowsModule } from './workflows/workflows.module';
 
 @Module({
     imports: [
-        // Config
-        ConfigModule.forRoot({ isGlobal: true, load: [appConfig] }),
-
-        // Structured logging
-        LoggerModule.forRootAsync({
-            inject: [ConfigService],
-            useFactory: (configService: ConfigService) => ({
-                pinoHttp: {
-                    level: configService.get('log.level'),
-                    transport:
-                        process.env.NODE_ENV !== 'production'
-                            ? { target: 'pino-pretty', options: { colorize: true, singleLine: true } }
-                            : undefined,
-                    serializers: {
-                        req(req: any) {
-                            return {
-                                method: req.method,
-                                url: req.url,
-                                id: req.id,
-                            };
-                        },
-                    },
-                },
-            }),
-        }),
-
-        // Rate limiting
+        CoreModule,
         ThrottlerModule.forRootAsync({
             inject: [ConfigService],
-            useFactory: (configService: ConfigService) => ([
-                {
-                    ttl: configService.get<number>('throttle.ttl') || 60000,
-                    limit: configService.get<number>('throttle.limit') || 100,
-                },
-            ]),
+            useFactory: (config: ConfigService<AppConfig, true>) => {
+                const { ttlMs, limit } = config.get('throttle', { infer: true });
+                return [{ name: 'default', ttl: ttlMs, limit }];
+            },
         }),
-
-        // Cron scheduler engine
-        ScheduleModule.forRoot(),
-
-        // Feature modules
-        DatabaseModule,
         AuthModule,
-        WorkflowModule,
-        QueuesModule,
+        WorkflowsModule,
         ExecutionsModule,
-        ApiKeysModule,
-        SchedulerModule,
         WebhooksModule,
+        SchedulerModule,
         MetricsModule,
+        HealthModule,
+        // Consumes jobs in this process only when WORKER_ENABLED=true.
+        ExecutionEngineModule,
     ],
-    providers: [
-        // Apply rate limiting globally
-        { provide: APP_GUARD, useClass: ThrottlerGuard },
-    ],
+    providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
-export class AppModule { }
+export class AppModule {}

@@ -1,0 +1,18 @@
+# Keep the build context small, fast to upload, and free of secrets.
+.git
+.github
+.claude
+node_modules
+dist
+coverage
+docs
+test
+**/*.spec.ts
+*.log
+.env
+.env.*
+!.env.example
+dashboard.html
+README.md
+docker-compose*.yml
+render.yaml

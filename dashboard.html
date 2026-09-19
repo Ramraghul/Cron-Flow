@@ -121,7 +121,7 @@
 <body>
 
 <header>
-  <h1>Cron<span>Flow</span> <span style="font-size:12px;color:var(--muted);font-weight:400;margin-left:8px;">v2 Dashboard</span></h1>
+  <h1>Cron<span>Flow</span> <span style="font-size:12px;color:var(--muted);font-weight:400;margin-left:8px;">v3 Dashboard</span></h1>
   <div class="flex-gap">
     <span id="conn-badge" class="badge"><span class="dot"></span>Disconnected</span>
     <button class="btn-ghost btn-sm" onclick="refresh()">↻ Refresh</button>
@@ -133,7 +133,7 @@
   <!-- Auth bar -->
   <div class="auth-bar">
     <label>API Base URL:</label>
-    <input id="base-url" value="http://localhost:3000" placeholder="http://localhost:3000" style="max-width:240px;" />
+    <input id="base-url" placeholder="https://your-api.example.com" style="max-width:240px;" />
     <label>JWT Token:</label>
     <input id="token-input" type="password" placeholder="Paste token from login..." style="max-width:320px;" />
     <button class="btn-primary" onclick="connect()">Connect</button>
@@ -172,7 +172,8 @@
       <div class="form-grid">
         <div class="form-group"><label>Workflow Name *</label><input id="wf-name" placeholder="Daily Report" /></div>
         <div class="form-group"><label>Cron Expression *</label><input id="wf-cron" placeholder="0 8 * * *" /></div>
-        <div class="form-group full"><label>Description</label><input id="wf-desc" placeholder="Optional description" /></div>
+        <div class="form-group"><label>Timezone</label><input id="wf-tz" placeholder="UTC" /></div>
+        <div class="form-group"><label>Description</label><input id="wf-desc" placeholder="Optional description" /></div>
       </div>
       <div style="margin-top:14px;">
         <div class="flex-between" style="margin-bottom:8px;">
@@ -261,7 +262,13 @@
 
 <script>
 // ─── State ─────────────────────────────────────────────────────────────────
-let BASE = 'http://localhost:3000';
+// Set this to your deployed API (https://…) so the hosted dashboard connects without typing a URL.
+// Local copies (localhost, or opened as a file) default to the API on this machine.
+const PRODUCTION_API_BASE = '';
+const IS_LOCAL = ['localhost', '127.0.0.1', ''].includes(location.hostname);
+const DEFAULT_BASE = IS_LOCAL ? 'http://localhost:3000' : PRODUCTION_API_BASE;
+const API_PREFIX = '/api/v1';
+let BASE = DEFAULT_BASE;
 let TOKEN = '';
 let steps = [];
 let stepCounter = 0;
@@ -270,28 +277,77 @@ let authMode = 'login';
 
 // ─── API helpers ────────────────────────────────────────────────────────────
 async function api(method, path, body) {
+  if (!BASE) throw new Error('Enter the API Base URL above, then click Connect');
   const headers = { 'Content-Type': 'application/json' };
-  if (TOKEN) headers['Authorization'] = `Bearer ${TOKEN}`;
-  const res = await fetch(BASE + path, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  // Remember which token this request used: several requests run in parallel, and the first 401 clears TOKEN.
+  const sentToken = TOKEN;
+  if (sentToken) headers['Authorization'] = `Bearer ${sentToken}`;
+  let res;
+  try {
+    res = await fetch(BASE + API_PREFIX + path, {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  } catch {
+    throw new Error(`Cannot reach the API at ${BASE}. Check the URL, that the API is running, and that its CORS_ORIGINS allows ${location.origin}.`);
+  }
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.message || `HTTP ${res.status}`);
+  if (!res.ok) {
+    // An expired or revoked token: forget it so the next action asks for a fresh login.
+    if (res.status === 401 && sentToken && !path.startsWith('/auth/')) {
+      if (TOKEN === sentToken) setToken('');
+      throw new Error('Your session has expired. Please log in again.');
+    }
+    const message = Array.isArray(data.message) ? data.message.join('; ') : data.message;
+    throw new Error(message || `HTTP ${res.status}`);
+  }
   return data;
+}
+
+function saveConfig() {
+  try { localStorage.setItem('cronflow_config', JSON.stringify({ base: BASE, token: TOKEN })); } catch {}
+}
+
+function setToken(token) {
+  TOKEN = token;
+  document.getElementById('token-input').value = token;
+  saveConfig();
+}
+
+// Browsers allow http://localhost from an https page but block any other http:// API ("mixed content").
+function isBlockedMixedContent(base) {
+  const url = new URL(base);
+  return location.protocol === 'https:' && url.protocol === 'http:' && !['localhost', '127.0.0.1'].includes(url.hostname);
+}
+
+// Reads the API Base URL field; returns false (after telling the user why) if it can't be used.
+function applyBaseFromInput() {
+  const base = document.getElementById('base-url').value.trim().replace(/\/+$/, '');
+  try {
+    if (base && isBlockedMixedContent(base)) {
+      toast('This page is served over HTTPS, so the browser blocks an http:// API. Use the API’s https:// URL.', 'error');
+      return false;
+    }
+  } catch {
+    toast('The API Base URL is not a valid URL', 'error');
+    return false;
+  }
+  BASE = base;
+  return true;
 }
 
 // ─── Connect ────────────────────────────────────────────────────────────────
 function connect() {
-  BASE = document.getElementById('base-url').value.replace(/\/$/, '');
-  TOKEN = document.getElementById('token-input').value.trim();
+  if (!applyBaseFromInput()) return;
+  setToken(document.getElementById('token-input').value.trim());
   refresh();
 }
 
 async function refresh() {
+  if (!BASE) { setConnBadge(false); return; }
   try {
-    const health = await fetch(BASE + '/metrics/health').then(r => r.json());
+    const health = await fetch(BASE + '/health/ready').then(r => r.json());
     setConnBadge(health.status === 'ok');
   } catch { setConnBadge(false); }
   if (!TOKEN) return;
@@ -312,8 +368,9 @@ async function loadMetrics() {
     document.getElementById('s-active-wf').textContent = m.workflows.active;
     document.getElementById('s-paused-wf').textContent = m.workflows.paused;
     document.getElementById('s-total-ex').textContent = m.executions.total;
-    document.getElementById('s-success-rate').textContent = m.executions.successRate;
-    document.getElementById('s-avg-dur').textContent = m.executions.avgDurationMs.toLocaleString();
+    document.getElementById('s-success-rate').textContent =
+      m.executions.successRatePercent === null ? '—' : `${m.executions.successRatePercent}%`;
+    document.getElementById('s-avg-dur').textContent = (m.executions.avgDurationMs ?? 0).toLocaleString();
     renderCharts(m.executions.byStatus, m.executions.byTrigger);
   } catch(e) { /* not authed yet */ }
 }
@@ -348,23 +405,24 @@ function renderCharts(byStatus, byTrigger) {
 async function loadWorkflows() {
   const wrap = document.getElementById('wf-table-wrap');
   try {
-    const workflows = await api('GET', '/workflows');
+    const { data: workflows } = await api('GET', '/workflows?limit=100');
     if (!workflows.length) { wrap.innerHTML = '<div class="empty">No workflows yet. Create one above.</div>'; return; }
     wrap.innerHTML = `
       <table>
         <thead><tr>
-          <th>Name</th><th>Cron</th><th>Status</th><th>Steps</th><th>Webhook Token</th><th>Actions</th>
+          <th>Name</th><th>Cron</th><th>Status</th><th>Steps</th><th>Next Run</th><th>Actions</th>
         </tr></thead>
         <tbody>${workflows.map(wf => `
           <tr>
             <td><div>${esc(wf.name)}</div><div class="sub">${wf.id.slice(0,12)}…</div></td>
-            <td><code>${esc(wf.cronExpression)}</code></td>
+            <td><code>${esc(wf.cronExpression)}</code><div class="sub">${esc(wf.timezone)}</div></td>
             <td>${statusBadge(wf.status)}</td>
-            <td>${wf.steps?.length ?? 0} step(s)</td>
-            <td><code style="font-size:11px;">${wf.webhookToken?.slice(0,14)}…</code></td>
+            <td>${wf.stepCount} step(s)</td>
+            <td>${wf.nextRunAt ? new Date(wf.nextRunAt).toLocaleString() : '—'}</td>
             <td>
               <div class="flex-gap">
-                <button class="btn-ghost btn-sm" onclick="loadExecutions('${wf.id}', '${esc(wf.name)}')">Executions</button>
+                <button class="btn-ghost btn-sm" data-name="${esc(wf.name)}" onclick="loadExecutions('${wf.id}', this.dataset.name)">Executions</button>
+                <button class="btn-ghost btn-sm" onclick="showWebhook('${wf.id}')">🔗 Webhook</button>
                 <button class="btn-primary btn-sm" onclick="triggerWorkflow('${wf.id}')">▶ Run</button>
                 ${wf.status === 'ACTIVE'
                   ? `<button class="btn-ghost btn-sm" onclick="pauseWorkflow('${wf.id}')">⏸ Pause</button>`
@@ -384,7 +442,7 @@ function statusBadge(s) {
 }
 
 async function triggerWorkflow(id) {
-  try { const r = await api('POST', `/executions/${id}/trigger`); toast('Execution started: ' + r.executionId, 'success'); loadWorkflows(); loadMetrics(); }
+  try { const r = await api('POST', `/workflows/${id}/executions`); toast('Execution queued: ' + r.executionId, 'success'); loadWorkflows(); loadMetrics(); }
   catch(e) { toast(e.message, 'error'); }
 }
 
@@ -398,6 +456,22 @@ async function resumeWorkflow(id) {
   catch(e) { toast(e.message, 'error'); }
 }
 
+async function showWebhook(id) {
+  try {
+    const wf = await api('GET', `/workflows/${id}`);
+    const url = `${BASE}${API_PREFIX}/webhooks/${wf.webhookToken}/trigger`;
+    document.getElementById('key-modal-title').textContent = 'Webhook URL';
+    document.getElementById('key-modal-body').innerHTML = `
+      <p style="margin-bottom:12px;color:var(--muted);">POST to this URL to run “${esc(wf.name)}” from another system. No auth header is needed, so treat the URL like a password.</p>
+      <div class="api-key-row">${esc(url)}</div>
+      <div class="flex-gap" style="margin-top:16px;">
+        <button class="btn-primary" data-copy="${esc(url)}" onclick="copyText(this.dataset.copy)">Copy URL</button>
+        <button class="btn-ghost" onclick="closeModal('key-modal')">Close</button>
+      </div>`;
+    document.getElementById('key-modal').style.display = 'flex';
+  } catch(e) { toast(e.message, 'error'); }
+}
+
 async function deleteWorkflow(id) {
   if (!confirm('Delete this workflow?')) return;
   try { await api('DELETE', `/workflows/${id}`); toast('Deleted', 'info'); loadWorkflows(); loadScheduler(); loadMetrics(); }
@@ -409,6 +483,8 @@ function toggleCreateForm() {
   const el = document.getElementById('create-form-wrap');
   el.style.display = el.style.display === 'none' ? 'block' : 'none';
   if (steps.length === 0) addStep();
+  const tz = document.getElementById('wf-tz');
+  if (!tz.value) tz.value = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
 }
 
 function addStep() {
@@ -446,6 +522,7 @@ async function createWorkflow() {
   const name = document.getElementById('wf-name').value.trim();
   const cron = document.getElementById('wf-cron').value.trim();
   const desc = document.getElementById('wf-desc').value.trim();
+  const timezone = document.getElementById('wf-tz').value.trim();
   if (!name || !cron) { toast('Name and cron expression required', 'error'); return; }
 
   const parsedSteps = steps.map((s, i) => {
@@ -455,7 +532,7 @@ async function createWorkflow() {
   });
 
   try {
-    await api('POST', '/workflows', { name, cronExpression: cron, description: desc, steps: parsedSteps });
+    await api('POST', '/workflows', { name, cronExpression: cron, description: desc || undefined, timezone: timezone || undefined, steps: parsedSteps });
     toast('Workflow created!', 'success');
     document.getElementById('wf-name').value = '';
     document.getElementById('wf-cron').value = '';
@@ -473,7 +550,7 @@ async function loadExecutions(workflowId, name) {
   const wrap = document.getElementById('exec-table-wrap');
   wrap.innerHTML = '<div class="empty"><span class="loader"></span></div>';
   try {
-    const { executions } = await api('GET', `/workflows/${workflowId}/executions?limit=15`);
+    const { data: executions } = await api('GET', `/workflows/${workflowId}/executions?limit=15`);
     if (!executions.length) { wrap.innerHTML = '<div class="empty">No executions yet</div>'; return; }
     wrap.innerHTML = `
       <table>
@@ -496,9 +573,10 @@ async function showExecution(id) {
   try {
     const e = await api('GET', `/executions/${id}`);
     const logs = e.steps.map(s =>
-      `[Step ${s.workflowStep?.stepOrder ?? '?'} • ${s.status}] ${s.logs || s.errorMessage || 'no logs'}`
+      `[Step ${s.stepOrder} • ${s.type} • ${s.status} • ${s.attempts} attempt(s)] ${s.logs || s.errorMessage || 'no logs'}`
     ).join('\n');
-    alert(`Execution ${id}\nStatus: ${e.status}\n\n${logs || 'No step logs'}`);
+    const failure = e.errorMessage ? `\nError: ${e.errorMessage}` : '';
+    alert(`Execution ${id}\nStatus: ${e.status} (${e.triggerType})${failure}\n\n${logs || 'No step logs'}`);
   } catch(e) { toast(e.message, 'error'); }
 }
 
@@ -561,16 +639,17 @@ async function revokeKey(id) {
 async function loadScheduler() {
   const wrap = document.getElementById('scheduler-wrap');
   try {
-    const { jobs } = await api('GET', '/scheduler/jobs');
+    const { data: jobs } = await api('GET', '/scheduler/jobs');
     if (!jobs.length) { wrap.innerHTML = '<div class="empty">No active cron jobs registered</div>'; return; }
     wrap.innerHTML = `
       <table>
-        <thead><tr><th>Workflow ID</th><th>Next Run</th><th>Running</th></tr></thead>
+        <thead><tr><th>Workflow</th><th>Schedule</th><th>Next Run</th><th>Registered</th></tr></thead>
         <tbody>${jobs.map(j => `
           <tr>
-            <td><code style="font-size:12px;">${j.workflowId}</code></td>
-            <td>${j.nextRun ? new Date(j.nextRun).toLocaleString() : '—'}</td>
-            <td>${statusBadge(j.running ? 'RUNNING' : 'PENDING')}</td>
+            <td><div>${esc(j.workflowName)}</div><div class="sub">${j.workflowId.slice(0,12)}…</div></td>
+            <td><code>${esc(j.cronExpression)}</code> <span class="sub">${esc(j.timezone)}</span></td>
+            <td>${j.nextRunAt ? new Date(j.nextRunAt).toLocaleString() : '—'}</td>
+            <td>${statusBadge(j.registered ? 'ACTIVE' : 'FAILED')}</td>
           </tr>
         `).join('')}</tbody>
       </table>`;
@@ -593,12 +672,12 @@ async function submitAuth() {
   const email = document.getElementById('auth-email').value.trim();
   const password = document.getElementById('auth-password').value;
   if (!email || !password) { toast('Email and password required', 'error'); return; }
+  if (!applyBaseFromInput()) return;
   try {
     const r = await api('POST', `/auth/${authMode}`, { email, password });
-    TOKEN = r.token;
-    document.getElementById('token-input').value = TOKEN;
+    setToken(r.accessToken);
     closeModal('login-modal');
-    toast(`${authMode === 'login' ? 'Logged in' : 'Registered'} as ${r.email}`, 'success');
+    toast(`${authMode === 'login' ? 'Logged in' : 'Registered'} as ${r.user.email}`, 'success');
     refresh();
   } catch(e) { toast(e.message, 'error'); }
 }
@@ -623,21 +702,18 @@ function toast(msg, type = 'info') {
 
 // ─── Boot ────────────────────────────────────────────────────────────────────
 // Poll health every 30s
-setInterval(() => fetch(BASE + '/metrics/health').then(r => r.json()).then(d => setConnBadge(d.status==='ok')).catch(() => setConnBadge(false)), 30000);
+setInterval(() => { if (BASE) fetch(BASE + '/health/ready').then(r => r.json()).then(d => setConnBadge(d.status==='ok')).catch(() => setConnBadge(false)); }, 30000);
 
-// Load from localStorage if available
+// Restore settings: ?api=<url> in the page address wins, then the last saved values, then the default.
 try {
   const saved = JSON.parse(localStorage.getItem('cronflow_config') || '{}');
-  if (saved.base) document.getElementById('base-url').value = saved.base;
-  if (saved.token) { document.getElementById('token-input').value = saved.token; TOKEN = saved.token; BASE = saved.base || BASE; refresh(); }
+  const fromQuery = new URLSearchParams(location.search).get('api');
+  BASE = (fromQuery || saved.base || DEFAULT_BASE).replace(/\/+$/, '');
+  TOKEN = saved.token || '';
 } catch {}
-
-// Save config on connect
-const origConnect = connect;
-connect = function() {
-  origConnect();
-  try { localStorage.setItem('cronflow_config', JSON.stringify({ base: BASE, token: TOKEN })); } catch {}
-};
+document.getElementById('base-url').value = BASE;
+document.getElementById('token-input').value = TOKEN;
+refresh();
 </script>
 </body>
 </html>

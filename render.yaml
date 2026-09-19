@@ -1,0 +1,90 @@
+# Render Blueprint — provisions the API, PostgreSQL and a Redis-compatible Key Value store.
+# Spec: https://render.com/docs/blueprint-spec
+#
+# Free-plan caveat: free web services sleep after ~15 minutes without traffic, and cron schedules
+# cannot fire while the service is asleep. For dependable schedules, use a paid instance type and,
+# optionally, the dedicated worker at the bottom of this file.
+services:
+  - type: web
+    name: cronflow-api
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    # Readiness (PostgreSQL + Redis) gates each deploy: a release with a broken connection never goes live.
+    healthCheckPath: /health/ready
+    autoDeployTrigger: checksPass
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: RUN_MIGRATIONS
+        value: "true"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: cronflow-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: cronflow-redis
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 1d
+      # Render terminates TLS at its proxy; trust one hop so rate limiting sees real client IPs.
+      - key: TRUST_PROXY_HOPS
+        value: "1"
+      - key: CORS_ORIGINS
+        value: "*"
+      # Background workers are not on the free plan, so jobs run inside the API process.
+      - key: WORKER_ENABLED
+        value: "true"
+      - key: HTTP_STEP_ALLOW_PRIVATE_NETWORKS
+        value: "false"
+      - key: LOG_LEVEL
+        value: info
+
+  - type: keyvalue
+    name: cronflow-redis
+    plan: free
+    region: oregon
+    # BullMQ requires noeviction: evicting keys would silently drop queued jobs.
+    maxmemoryPolicy: noeviction
+    # An empty allow list keeps the instance reachable only from Render's private network.
+    ipAllowList: []
+
+  # ── Optional: dedicated worker (paid plans) ───────────────────────────────
+  # Uncomment, set WORKER_ENABLED=false on cronflow-api, and give it the same
+  # DATABASE_URL, REDIS_URL and JWT_SECRET values as the web service.
+  #
+  # - type: worker
+  #   name: cronflow-worker
+  #   runtime: docker
+  #   plan: starter
+  #   region: oregon
+  #   dockerfilePath: ./Dockerfile
+  #   dockerCommand: node dist/worker.js
+  #   envVars:
+  #     - key: NODE_ENV
+  #       value: production
+  #     - key: DATABASE_URL
+  #       fromDatabase:
+  #         name: cronflow-db
+  #         property: connectionString
+  #     - key: REDIS_URL
+  #       fromService:
+  #         type: keyvalue
+  #         name: cronflow-redis
+  #         property: connectionString
+  #     - key: JWT_SECRET
+  #       sync: false
+
+databases:
+  - name: cronflow-db
+    databaseName: cronflow
+    user: cronflow
+    plan: free
+    region: oregon
+    postgresMajorVersion: "16"

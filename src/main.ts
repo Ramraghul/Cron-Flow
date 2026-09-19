@@ -1,77 +1,33 @@
-import './queues/processors/workflow.processor';
-import { NestFactory } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
-import { ValidationPipe } from '@nestjs/common';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { Logger } from 'nestjs-pino';
+import { API_PREFIX, DOCS_PATH } from './app.constants';
 import { AppModule } from './app.module';
-import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import { configureApp } from './app.setup';
+import { AppConfig } from './config/configuration';
 
-async function bootstrap() {
-    const app = await NestFactory.create(AppModule, { bufferLogs: true });
-
-    // Structured logging via Pino
-    app.useLogger(app.get(Logger));
-
-    const configService = app.get(ConfigService);
-
-    // Global validation pipe
-    app.useGlobalPipes(
-        new ValidationPipe({
-            whitelist: true,
-            forbidNonWhitelisted: true,
-            transform: true,
-        }),
-    );
-
-    // Global exception filter
-    app.useGlobalFilters(new AllExceptionsFilter());
-
-    // CORS
-    app.enableCors();
-
-    // ─── Swagger
-    const swaggerConfig = new DocumentBuilder()
-        .setTitle('CronFlow API')
-        .setDescription(
-            'CronFlow v2 — Workflow Automation Platform.\n\n' +
-            'Authenticate via **JWT Bearer token** (from `/auth/login`) ' +
-            'or an **API key** (`x-api-key` header).',
-        )
-        .setVersion('2.0.0')
-        .addBearerAuth(
-            { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
-            'JWT',
-        )
-        .addApiKey({ type: 'apiKey', in: 'header', name: 'x-api-key' }, 'ApiKey')
-        .addTag('Auth', 'Register and login')
-        .addTag('Workflows', 'Create, manage, pause, and resume workflows')
-        .addTag('Executions', 'Trigger and inspect execution history')
-        .addTag('Scheduler', 'Cron-based scheduler engine status')
-        .addTag('Webhooks', 'Trigger workflows via webhook URL')
-        .addTag('API Keys', 'Generate and revoke API keys')
-        .addTag('Metrics', 'Platform-wide metrics and health')
-        .build();
-
-    const document = SwaggerModule.createDocument(app, swaggerConfig);
-    SwaggerModule.setup('docs', app, document, {
-        swaggerOptions: {
-            persistAuthorization: true,
-            tagsSorter: 'alpha',
-        },
-        customSiteTitle: 'CronFlow API Docs',
+async function bootstrap(): Promise<void> {
+    const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+        bufferLogs: true,
+        // Surface startup errors (e.g. invalid env) to the catch below instead of aborting the process.
+        abortOnError: false,
     });
-    // ─────────────────────────────────────────────────────────────────────────
+    const logger = app.get(Logger);
+    app.useLogger(logger);
+    configureApp(app);
 
-    const port = configService.get<number>('port') || 3000;
-    await app.listen(port);
+    const { port, swaggerEnabled } = app.get<ConfigService<AppConfig, true>>(ConfigService).get('http', { infer: true });
+    await app.listen(port, '0.0.0.0');
 
-    console.log(`CronFlow v2 running on: http://localhost:${port}`);
-    console.log(`Swagger docs:           http://localhost:${port}/docs`);
-    console.log(`Metrics:                http://localhost:${port}/metrics`);
+    logger.log(`CronFlow API listening on port ${port} — routes under /${API_PREFIX}`, 'Bootstrap');
+    if (swaggerEnabled) {
+        logger.log(`Swagger UI: http://localhost:${port}/${DOCS_PATH}`, 'Bootstrap');
+    }
 }
 
-bootstrap().catch((error) => {
-    console.error('Failed to bootstrap application:', error);
+bootstrap().catch((error: unknown) => {
+    // The structured logger may not exist yet (e.g. configuration failed validation), so use stderr.
+    console.error('CronFlow API failed to start:', error);
     process.exit(1);
 });

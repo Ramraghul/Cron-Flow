@@ -1,39 +1,33 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { PrismaService } from '../../database/prisma.service';
-import { QueueService } from '../../queues/services/queue.service';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma, TriggerType, WorkflowStatus } from '@prisma/client';
+import { ExecutionAcceptedDto } from '../../executions/dto/execution-response.dto';
+import { ExecutionsService } from '../../executions/services/executions.service';
+import { WorkflowsRepository } from '../../workflows/repositories/workflows.repository';
+
+function isNonEmptyObject(value: unknown): value is Prisma.InputJsonObject {
+    return typeof value === 'object' && value !== null && !Array.isArray(value) && Object.keys(value).length > 0;
+}
 
 @Injectable()
 export class WebhooksService {
     constructor(
-        private readonly prisma: PrismaService,
-        private readonly queueService: QueueService,
+        private readonly workflowsRepository: WorkflowsRepository,
+        private readonly executionsService: ExecutionsService,
     ) {}
 
-    async triggerByToken(webhookToken: string, payload: Record<string, any>) {
-        const workflow = await this.prisma.workflow.findUnique({
-            where: { webhookToken },
-        });
-
-        if (!workflow) throw new NotFoundException('Webhook not found');
-
-        if (workflow.status === 'PAUSED') {
-            return { message: 'Workflow is paused — trigger ignored', workflowId: workflow.id };
+    async trigger(webhookToken: string, payload: unknown): Promise<ExecutionAcceptedDto> {
+        const workflow = await this.workflowsRepository.findByWebhookToken(webhookToken);
+        if (!workflow) {
+            throw new NotFoundException('Webhook not found');
+        }
+        if (workflow.status === WorkflowStatus.PAUSED) {
+            throw new ConflictException('Workflow is paused — webhook trigger ignored');
         }
 
-        const execution = await this.prisma.execution.create({
-            data: { workflowId: workflow.id, triggerType: 'WEBHOOK' },
-        });
-
-        await this.queueService.addWorkflowJob({
-            executionId: execution.id,
-            workflowId: workflow.id,
-            webhookPayload: payload,
-        });
-
-        return {
-            message: 'Webhook received — execution queued',
-            executionId: execution.id,
-            workflowId: workflow.id,
-        };
+        return this.executionsService.createAndEnqueue(
+            workflow.id,
+            TriggerType.WEBHOOK,
+            isNonEmptyObject(payload) ? payload : undefined,
+        );
     }
 }

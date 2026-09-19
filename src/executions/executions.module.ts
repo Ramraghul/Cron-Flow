@@ -1,16 +1,16 @@
 import { Module } from '@nestjs/common';
-import { DatabaseModule } from '../database/database.module';
+import { AuthModule } from '../auth/auth.module';
 import { QueuesModule } from '../queues/queues.module';
-import { WorkflowModule } from '../workflows/workflow.module';
-import { ExecutionController } from './controllers/execution.controller';
-import { ExecutionQueryController } from './controllers/execution-query.controller';
-import { ExecutionService } from './services/execution.service';
-import { ExecutionRepository } from './repositories/execution.repository';
+import { WorkflowsModule } from '../workflows/workflows.module';
+import { ExecutionsController } from './controllers/executions.controller';
+import { WorkflowExecutionsController } from './controllers/workflow-executions.controller';
+import { ExecutionsRepository } from './repositories/executions.repository';
+import { ExecutionsService } from './services/executions.service';
 
 @Module({
-    imports: [DatabaseModule, QueuesModule, WorkflowModule],
-    controllers: [ExecutionController, ExecutionQueryController],
-    providers: [ExecutionService, ExecutionRepository],
-    exports: [ExecutionService, ExecutionRepository],
+    imports: [AuthModule, QueuesModule, WorkflowsModule],
+    controllers: [WorkflowExecutionsController, ExecutionsController],
+    providers: [ExecutionsService, ExecutionsRepository],
+    exports: [ExecutionsService],
 })
 export class ExecutionsModule {}

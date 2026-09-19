@@ -1,11 +1,11 @@
 import { Module } from '@nestjs/common';
-import { DatabaseModule } from '../database/database.module';
-import { QueuesModule } from '../queues/queues.module';
+import { ExecutionsModule } from '../executions/executions.module';
+import { WorkflowsModule } from '../workflows/workflows.module';
 import { WebhooksController } from './controllers/webhooks.controller';
 import { WebhooksService } from './services/webhooks.service';
 
 @Module({
-    imports: [DatabaseModule, QueuesModule],
+    imports: [WorkflowsModule, ExecutionsModule],
     controllers: [WebhooksController],
     providers: [WebhooksService],
 })

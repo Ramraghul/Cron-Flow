@@ -1,11 +1,11 @@
 import { Module } from '@nestjs/common';
-import { DatabaseModule } from '../database/database.module';
+import { AuthModule } from '../auth/auth.module';
 import { QueuesModule } from '../queues/queues.module';
-import { SchedulerService } from './services/scheduler.service';
 import { SchedulerController } from './controllers/scheduler.controller';
+import { SchedulerService } from './services/scheduler.service';
 
 @Module({
-    imports: [DatabaseModule, QueuesModule],
+    imports: [AuthModule, QueuesModule],
     controllers: [SchedulerController],
     providers: [SchedulerService],
     exports: [SchedulerService],
