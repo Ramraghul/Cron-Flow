@@ -1695,6 +1695,39 @@
           "Health"
         ]
       }
+    },
+    "/api/v1": {
+      "get": {
+        "description": "Public welcome endpoint: version, dependency health, and links to the docs, health probes and every resource group. Use it to verify a deployment without credentials.",
+        "operationId": "ServiceInfo_info",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceInfoResponseDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded — retry after the window resets",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Service information",
+        "tags": [
+          "Service"
+        ]
+      }
     }
   },
   "info": {
@@ -3138,6 +3171,96 @@
           "status",
           "checks",
           "timestamp"
+        ]
+      },
+      "ServiceLinksDto": {
+        "type": "object",
+        "properties": {
+          "swaggerUi": {
+            "type": "string",
+            "example": "https://cron-flow-ramraghuls-projects.vercel.app/docs"
+          },
+          "openapi": {
+            "type": "string",
+            "example": "https://cron-flow-ramraghuls-projects.vercel.app/docs-json"
+          },
+          "liveness": {
+            "type": "string",
+            "example": "https://cron-flow-ramraghuls-projects.vercel.app/health/live"
+          },
+          "readiness": {
+            "type": "string",
+            "example": "https://cron-flow-ramraghuls-projects.vercel.app/health/ready"
+          }
+        },
+        "required": [
+          "swaggerUi",
+          "openapi",
+          "liveness",
+          "readiness"
+        ]
+      },
+      "ServiceInfoResponseDto": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string",
+            "example": "CronFlow API"
+          },
+          "version": {
+            "type": "string",
+            "example": "3.0.0"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "degraded"
+            ],
+            "example": "ok",
+            "description": "`degraded` when PostgreSQL or Redis is unreachable — see `dependencies`."
+          },
+          "response": {
+            "type": "string",
+            "example": "Up and Running",
+            "description": "The status in plain English."
+          },
+          "environment": {
+            "type": "string",
+            "example": "production"
+          },
+          "uptimeSeconds": {
+            "type": "number",
+            "example": 3600,
+            "description": "Seconds this process has been running."
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-09-14T10:00:00.000Z"
+          },
+          "dependencies": {
+            "$ref": "#/components/schemas/ReadinessChecksDto"
+          },
+          "links": {
+            "description": "Absolute URLs on the host this request arrived on.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ServiceLinksDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "service",
+          "version",
+          "status",
+          "response",
+          "environment",
+          "uptimeSeconds",
+          "timestamp",
+          "dependencies",
+          "links"
         ]
       }
     }

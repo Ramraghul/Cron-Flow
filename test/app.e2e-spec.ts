@@ -80,6 +80,19 @@ describe('CronFlow API (e2e)', () => {
         });
     });
 
+    it('answers at the API root with service info, without credentials', async () => {
+        const response = await api().get(API).expect(200);
+
+        expect(response.body).toMatchObject({
+            service: 'CronFlow API',
+            status: 'ok',
+            response: 'Up and Running',
+            dependencies: { database: { status: 'up' }, redis: { status: 'up' } },
+        });
+        expect(response.body.links.swaggerUi).toMatch(/\/docs$/);
+        expect(response.body.links.readiness).toMatch(/\/health\/ready$/);
+    });
+
     describe('authentication', () => {
         it('registers, rejects a duplicate email in any case, and logs in', async () => {
             token = await register('ada@example.com');

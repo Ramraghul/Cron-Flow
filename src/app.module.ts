@@ -10,6 +10,7 @@ import { ExecutionsModule } from './executions/executions.module';
 import { HealthModule } from './health/health.module';
 import { MetricsModule } from './metrics/metrics.module';
 import { SchedulerModule } from './scheduler/scheduler.module';
+import { ServiceInfoModule } from './service-info/service-info.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
 import { WorkflowsModule } from './workflows/workflows.module';
 
@@ -30,6 +31,7 @@ import { WorkflowsModule } from './workflows/workflows.module';
         SchedulerModule,
         MetricsModule,
         HealthModule,
+        ServiceInfoModule,
         // Consumes jobs in this process only when WORKER_ENABLED=true.
         ExecutionEngineModule,
     ],
