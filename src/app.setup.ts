@@ -4,6 +4,7 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import helmet, { HelmetOptions } from 'helmet';
 import { API_PREFIX, REQUEST_ID_HEADER } from './app.constants';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import { DemoAccountsService } from './common/services/demo-accounts.service';
 import { flattenValidationErrors } from './common/validation/validation-errors';
 import { AppConfig } from './config/configuration';
 import { setupSwagger, shouldLoadSwaggerUiFromCdn, SWAGGER_UI_CDN_ORIGIN } from './swagger/swagger';
@@ -61,6 +62,6 @@ export function configureApp(app: NestExpressApplication): void {
     app.enableShutdownHooks();
 
     if (http.swaggerEnabled) {
-        setupSwagger(app);
+        setupSwagger(app, { demoEmail: app.get(DemoAccountsService).demoEmail });
     }
 }

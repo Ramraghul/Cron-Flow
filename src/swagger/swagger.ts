@@ -58,10 +58,20 @@ function isOnVercel(env: NodeJS.ProcessEnv): boolean {
     return Boolean(env.VERCEL);
 }
 
-export function buildOpenApiDocument(app: INestApplication): OpenAPIObject {
+/** Explains the public demo in the docs, so nobody wonders why a write came back 403. */
+function demoDescription(demoEmail: string): string {
+    return `
+
+### Demo account
+This server hosts a public read-only demo (\`${demoEmail}\`). These docs sign in to it automatically, so
+**Try it out** works straight away for anything that reads. Creating, changing, running or deleting returns
+\`403\` — register your own account with \`POST /${API_PREFIX}/auth/register\` for that.`;
+}
+
+export function buildOpenApiDocument(app: INestApplication, demoEmail?: string): OpenAPIObject {
     const builder = new DocumentBuilder()
         .setTitle('CronFlow API')
-        .setDescription(API_DESCRIPTION)
+        .setDescription(API_DESCRIPTION + (demoEmail ? demoDescription(demoEmail) : ''))
         .setVersion(APP_VERSION)
         .addBearerAuth(
             { type: 'http', scheme: 'bearer', bearerFormat: 'JWT', description: `Access token from POST /${API_PREFIX}/auth/login` },
@@ -121,6 +131,69 @@ export function swaggerUiAssetsOnDisk(directory: string = SWAGGER_UI_ASSETS_DIRE
     return SWAGGER_UI_ASSETS.every((asset) => existsSync(join(directory, asset)));
 }
 
+/** Path of the script below, served by this app so the page's strict `script-src 'self'` policy allows it. */
+const DEMO_AUTH_SCRIPT_PATH = `/${DOCS_PATH}/demo-auth.js`;
+
+/**
+ * Signs Swagger UI in to the demo account and says so on the page. Runs before `window.onload`, when
+ * Swagger UI has yet to publish `window.ui`, so it retries until the page is ready (or gives up after 10s).
+ */
+const DEMO_AUTH_SCRIPT = `(function () {
+    var BANNER_ID = 'cronflow-demo-banner';
+
+    function authorize(token) {
+        if (!window.ui || typeof window.ui.preauthorizeApiKey !== 'function') {
+            return false;
+        }
+        window.ui.preauthorizeApiKey('${JWT_SECURITY_SCHEME}', token);
+        return true;
+    }
+
+    function showBanner(email) {
+        if (document.getElementById(BANNER_ID)) {
+            return true;
+        }
+        var information = document.querySelector('.swagger-ui .information-container');
+        if (!information) {
+            return false;
+        }
+        var banner = document.createElement('div');
+        banner.id = BANNER_ID;
+        banner.style.cssText = 'max-width:1460px;margin:16px auto 0;padding:12px 16px;border:1px solid #4990e2;' +
+            'border-radius:6px;background:#eaf3fc;color:#3b4151;font-family:sans-serif;font-size:13px;line-height:1.5';
+        banner.textContent = 'Signed in as the read-only demo account (' + email + '). Try it out works for every ' +
+            'read; creating, changing, running and deleting return 403.';
+        information.parentNode.insertBefore(banner, information);
+        return true;
+    }
+
+    fetch('/${API_PREFIX}/auth/demo', { method: 'POST' })
+        .then(function (response) { return response.ok ? response.json() : null; })
+        .then(function (demo) {
+            if (!demo) {
+                return;
+            }
+            var authorized = false;
+            var explained = false;
+            var attempts = 0;
+            var timer = setInterval(function () {
+                authorized = authorized || authorize(demo.accessToken);
+                explained = explained || showBanner(demo.user.email);
+                if ((authorized && explained) || ++attempts > 100) {
+                    clearInterval(timer);
+                }
+            }, 100);
+        })
+        .catch(function () { /* No demo on this server: the docs stay as they are. */ });
+})();
+`;
+
+function serveDemoAuthScript(app: INestApplication): void {
+    app.getHttpAdapter().get(DEMO_AUTH_SCRIPT_PATH, (_request: Request, response: Response) =>
+        response.type('application/javascript').send(DEMO_AUTH_SCRIPT),
+    );
+}
+
 function redirectSwaggerUiAssetsToCdn(app: INestApplication): void {
     const httpAdapter = app.getHttpAdapter();
     for (const asset of SWAGGER_UI_ASSETS) {
@@ -130,17 +203,25 @@ function redirectSwaggerUiAssetsToCdn(app: INestApplication): void {
     }
 }
 
-/** Serves Swagger UI at /docs and the raw document at /docs-json. */
-export function setupSwagger(app: INestApplication): void {
+/**
+ * Serves Swagger UI at /docs and the raw document at /docs-json.
+ *
+ * @param demoEmail the server's read-only demo account, if it has one: the docs then sign in to it.
+ */
+export function setupSwagger(app: INestApplication, { demoEmail }: { demoEmail?: string } = {}): void {
     // Registered first, so these routes answer before the static-file handler.
     if (shouldLoadSwaggerUiFromCdn()) {
         redirectSwaggerUiAssetsToCdn(app);
     }
+    if (demoEmail) {
+        serveDemoAuthScript(app);
+    }
 
-    SwaggerModule.setup(DOCS_PATH, app, () => buildOpenApiDocument(app), {
+    SwaggerModule.setup(DOCS_PATH, app, () => buildOpenApiDocument(app, demoEmail), {
         jsonDocumentUrl: `${DOCS_PATH}-json`,
         customSiteTitle: 'CronFlow API Docs',
         customSwaggerUiPath: SWAGGER_UI_ASSETS_DIRECTORY,
+        customJs: demoEmail ? DEMO_AUTH_SCRIPT_PATH : undefined,
         swaggerOptions: {
             persistAuthorization: true,
             displayRequestDuration: true,

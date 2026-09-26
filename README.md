@@ -650,6 +650,7 @@ Every error uses one envelope. `requestId` matches the `X-Request-Id` response h
 
 - **Swagger UI:** `http://localhost:3000/docs` locally, or the [deployed docs](https://cron-flow-ramraghuls-projects.vercel.app/docs). Click **Authorize** and paste a JWT or API key; authorization persists across reloads. Request bodies include ready-to-send examples.
 - **OpenAPI JSON:** `/docs-json` on either server.
+- **Demo sign-in:** when `DEMO_READ_ONLY_EMAILS` is set, the docs sign in to that account by themselves and say so in a banner, so **Try it out** works immediately for every read. Writes return `403`. The script is served from `/docs/demo-auth.js`, keeping the page's strict `script-src 'self'` policy.
 - **"Try it out" servers:** the **Servers** dropdown offers Local and Deployed; the one you're viewing the docs on is selected by default. Calling the deployed API from local docs requires `http://localhost:3000` in its `CORS_ORIGINS`.
 - **Committed spec:** [`docs/openapi.json`](docs/openapi.json), viewable without running anything. Regenerate it after API changes with `npm run openapi:export`, which needs no database, Redis or `.env`.
 

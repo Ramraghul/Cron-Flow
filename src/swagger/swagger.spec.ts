@@ -19,15 +19,17 @@ import {
 
 const CDN_BASE = `${SWAGGER_UI_CDN_ORIGIN}/npm/swagger-ui-dist@${SWAGGER_UI_VERSION}`;
 
+const DEMO_EMAIL = 'demo@example.com';
+
 /** Boots a minimal app with the production Helmet + Swagger setup, optionally as if running on Vercel. */
-async function createDocsApp(onVercel: boolean): Promise<INestApplication<App>> {
+async function createDocsApp(onVercel: boolean, demoEmail?: string): Promise<INestApplication<App>> {
     if (onVercel) {
         process.env.VERCEL = '1';
     }
     const moduleRef = await Test.createTestingModule({}).compile();
     const app = moduleRef.createNestApplication<INestApplication<App>>({ logger: false });
     app.use(helmet(helmetOptions(shouldLoadSwaggerUiFromCdn())));
-    setupSwagger(app);
+    setupSwagger(app, { demoEmail });
     await app.init();
     return app;
 }
@@ -80,6 +82,43 @@ describe('Swagger UI assets', () => {
             DEPLOYED_API_ORIGIN,
             LOCAL_API_ORIGIN,
         ]);
+    });
+
+    describe('read-only demo', () => {
+        it('serves a script that signs the docs page in, and says so in the description', async () => {
+            app = await createDocsApp(false, DEMO_EMAIL);
+
+            const page = await request(app.getHttpServer()).get('/docs').expect(200);
+            expect(page.text).toContain("src='/docs/demo-auth.js'");
+
+            const script = await request(app.getHttpServer()).get('/docs/demo-auth.js').expect(200);
+            expect(script.headers['content-type']).toContain('javascript');
+            expect(script.text).toContain("fetch('/api/v1/auth/demo', { method: 'POST' })");
+            expect(script.text).toContain(`preauthorizeApiKey('JWT'`);
+
+            const spec = await request(app.getHttpServer()).get('/docs-json').expect(200);
+            expect(spec.body.info.description).toContain(DEMO_EMAIL);
+            expect(spec.body.info.description).toContain('403');
+        });
+
+        it('leaves the docs untouched on a server without a demo account', async () => {
+            app = await createDocsApp(false);
+
+            const page = await request(app.getHttpServer()).get('/docs').expect(200);
+            expect(page.text).not.toContain('demo-auth.js');
+            await request(app.getHttpServer()).get('/docs/demo-auth.js').expect(404);
+
+            const spec = await request(app.getHttpServer()).get('/docs-json').expect(200);
+            expect(spec.body.info.description).not.toContain('Demo account');
+        });
+
+        it('keeps the strict script policy, since the script is served by this app', async () => {
+            app = await createDocsApp(false, DEMO_EMAIL);
+
+            const page = await request(app.getHttpServer()).get('/docs').expect(200);
+
+            expect(page.headers['content-security-policy']).toContain("script-src 'self';");
+        });
     });
 
     it('redirects to the CDN, and allows it in the Content-Security-Policy, when the Swagger UI files are missing', async () => {
