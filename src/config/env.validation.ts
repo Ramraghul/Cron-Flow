@@ -70,6 +70,10 @@ export class EnvironmentVariables {
     @IsString()
     CORS_ORIGINS = '*';
 
+    /** Comma-separated emails that may read but never write — used for the public demo account. */
+    @IsString()
+    DEMO_READ_ONLY_EMAILS = '';
+
     @Type(() => Number)
     @IsInt()
     @Min(0)

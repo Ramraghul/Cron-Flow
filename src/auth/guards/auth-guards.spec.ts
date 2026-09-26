@@ -1,13 +1,26 @@
 import { ExecutionContext, UnauthorizedException } from '@nestjs/common';
 import { authenticatedUser } from '../../../test/utils/factories';
-import { createMock } from '../../../test/utils/mocks';
+import { createConfigMock, createMock } from '../../../test/utils/mocks';
 import { ApiKeysService } from '../../api-keys/services/api-keys.service';
+import { DEMO_READ_ONLY_MESSAGE, DemoAccountsService } from '../../common/services/demo-accounts.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { JwtOrApiKeyGuard } from './jwt-or-api-key.guard';
 
-function createContext(headers: Record<string, string> = {}) {
-    const request: { headers: Record<string, string>; header: (name: string) => string | undefined; user?: unknown } = {
+const DEMO_EMAIL = 'demo@example.com';
+
+function demoAccounts(): DemoAccountsService {
+    return new DemoAccountsService(createConfigMock({ demo: { readOnlyEmails: [DEMO_EMAIL] } }));
+}
+
+function createContext(headers: Record<string, string> = {}, method = 'GET') {
+    const request: {
+        headers: Record<string, string>;
+        method: string;
+        header: (name: string) => string | undefined;
+        user?: unknown;
+    } = {
         headers,
+        method,
         header: (name) => headers[name.toLowerCase()],
     };
     const context = {
@@ -23,7 +36,7 @@ describe('JwtOrApiKeyGuard', () => {
 
     beforeEach(() => {
         apiKeysService = createMock<ApiKeysService>(['authenticate']);
-        guard = new JwtOrApiKeyGuard(apiKeysService);
+        guard = new JwtOrApiKeyGuard(apiKeysService, demoAccounts());
         jwtCanActivate = jest.spyOn(JwtAuthGuard.prototype, 'canActivate').mockResolvedValue(true);
     });
 
@@ -57,8 +70,54 @@ describe('JwtOrApiKeyGuard', () => {
     });
 });
 
+describe('demo accounts are read-only', () => {
+    /** Stands in for Passport: authentication succeeds and attaches the demo user. */
+    function mockPassportAuthentication(user: { email: string }) {
+        jest.spyOn(Object.getPrototypeOf(JwtAuthGuard.prototype), 'canActivate').mockImplementation(((
+            context: ExecutionContext,
+        ) => {
+            context.switchToHttp().getRequest<{ user?: unknown }>().user = { ...authenticatedUser, ...user };
+            return true;
+        }) as () => boolean);
+    }
+
+    it.each([['POST'], ['PATCH'], ['DELETE']])('blocks a bearer token writing with %s', async (method) => {
+        mockPassportAuthentication({ email: DEMO_EMAIL });
+        const guard = new JwtAuthGuard(demoAccounts());
+
+        await expect(guard.canActivate(createContext({ authorization: 'Bearer demo' }, method).context)).rejects.toThrow(
+            DEMO_READ_ONLY_MESSAGE,
+        );
+    });
+
+    it('lets a demo bearer token read', async () => {
+        mockPassportAuthentication({ email: DEMO_EMAIL });
+        const guard = new JwtAuthGuard(demoAccounts());
+
+        await expect(guard.canActivate(createContext({ authorization: 'Bearer demo' }, 'GET').context)).resolves.toBe(true);
+    });
+
+    it('leaves other accounts free to write', async () => {
+        mockPassportAuthentication({ email: 'ada@example.com' });
+        const guard = new JwtAuthGuard(demoAccounts());
+
+        await expect(guard.canActivate(createContext({ authorization: 'Bearer real' }, 'POST').context)).resolves.toBe(true);
+    });
+
+    it('blocks a demo API key from writing, but not from reading', async () => {
+        const apiKeysService = createMock<ApiKeysService>(['authenticate']);
+        apiKeysService.authenticate.mockResolvedValue({ ...authenticatedUser, email: DEMO_EMAIL, authMethod: 'api-key' });
+        const guard = new JwtOrApiKeyGuard(apiKeysService, demoAccounts());
+
+        await expect(guard.canActivate(createContext({ 'x-api-key': 'cf_demo' }, 'DELETE').context)).rejects.toThrow(
+            DEMO_READ_ONLY_MESSAGE,
+        );
+        await expect(guard.canActivate(createContext({ 'x-api-key': 'cf_demo' }, 'GET').context)).resolves.toBe(true);
+    });
+});
+
 describe('JwtAuthGuard.handleRequest', () => {
-    const guard = new JwtAuthGuard();
+    const guard = new JwtAuthGuard(demoAccounts());
 
     it('returns the authenticated user', () => {
         expect(guard.handleRequest(null, authenticatedUser, undefined)).toBe(authenticatedUser);

@@ -33,6 +33,10 @@
   .auth-bar input { flex: 1; min-width: 200px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 7px 12px; color: var(--text); font-size: 13px; }
   .auth-bar input:focus { outline: none; border-color: var(--accent); }
   .auth-bar select { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 7px 10px; color: var(--text); font-size: 13px; }
+  .session-label { color: var(--muted); font-size: 13px; margin-left: auto; }
+  .demo-banner { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; background: rgba(99,102,241,.12); border: 1px solid var(--accent); border-radius: var(--radius); padding: 12px 16px; font-size: 13px; }
+  /* The demo account may only read, so every control that changes something is hidden. */
+  body.read-only [data-write] { display: none !important; }
 
   /* Buttons */
   button { cursor: pointer; border: none; border-radius: 6px; padding: 8px 16px; font-size: 13px; font-weight: 600; transition: opacity .15s, transform .1s; }
@@ -136,10 +140,22 @@
     <label>API:</label>
     <select id="api-target" onchange="selectApiTarget(this.value)" title="Choose the API server"></select>
     <input id="base-url" placeholder="https://your-api.example.com" style="max-width:260px;" />
-    <label>JWT Token:</label>
-    <input id="token-input" type="password" placeholder="Paste token from login..." style="max-width:320px;" />
     <button class="btn-primary" onclick="connect()">Connect</button>
     <button class="btn-ghost" onclick="showLoginModal()">Login / Register</button>
+    <button class="btn-ghost" id="logout-btn" onclick="logout()" style="display:none;">Logout</button>
+    <button class="btn-ghost" id="advanced-btn" onclick="toggleAdvanced()" title="Use a token instead of logging in">Advanced</button>
+    <span class="session-label" id="session-label"></span>
+  </div>
+
+  <div class="auth-bar" id="advanced-bar" style="display:none;">
+    <label>JWT Token:</label>
+    <input id="token-input" type="password" placeholder="Paste a token to use instead of logging in..." style="max-width:320px;" />
+    <button class="btn-primary" onclick="useToken()">Use token</button>
+  </div>
+
+  <div class="demo-banner" id="demo-banner" style="display:none;">
+    <span>👀 <strong>Read-only demo.</strong> Look around as much as you like — creating, running, pausing and deleting are switched off. Register your own account to try everything.</span>
+    <button class="btn-primary btn-sm" onclick="showLoginModal()">Register</button>
   </div>
 
   <!-- Stats -->
@@ -168,7 +184,7 @@
   <div class="section">
     <div class="section-header">
       <h2>Workflows</h2>
-      <button class="btn-primary btn-sm" onclick="toggleCreateForm()">+ New Workflow</button>
+      <button class="btn-primary btn-sm" data-write onclick="toggleCreateForm()">+ New Workflow</button>
     </div>
     <div id="create-form-wrap" style="display:none; padding:20px; border-bottom:1px solid var(--border); background:rgba(0,0,0,.2);">
       <div class="form-grid">
@@ -211,7 +227,7 @@
   <div class="section">
     <div class="section-header">
       <h2>API Keys</h2>
-      <button class="btn-primary btn-sm" onclick="showCreateKeyModal()">+ Create Key</button>
+      <button class="btn-primary btn-sm" data-write onclick="showCreateKeyModal()">+ Create Key</button>
     </div>
     <div id="keys-table-wrap">
       <div class="empty"><span class="loader"></span></div>
@@ -281,6 +297,8 @@ let steps = [];
 let stepCounter = 0;
 let statusChart = null, triggerChart = null;
 let authMode = 'login';
+// Who the current token belongs to: { email, readOnly }. Null until a session is established.
+let session = null;
 
 // ─── API helpers ────────────────────────────────────────────────────────────
 async function api(method, path, body) {
@@ -363,7 +381,7 @@ function selectApiTarget(id) {
   TOKEN = savedTokens[BASE] || '';
   document.getElementById('token-input').value = TOKEN;
   saveConfig();
-  refresh();
+  connectSession();
 }
 
 function syncTargetSelector() {
@@ -372,10 +390,81 @@ function syncTargetSelector() {
 }
 
 // ─── Connect ────────────────────────────────────────────────────────────────
+// Applies the API Base URL field, then establishes a session on that server.
 function connect() {
   if (!applyBaseFromInput()) return;
+  saveConfig();
+  connectSession();
+}
+
+// "Advanced": use a token pasted by hand instead of logging in.
+function useToken() {
+  if (!applyBaseFromInput()) return;
   setToken(document.getElementById('token-input').value.trim());
-  refresh();
+  connectSession();
+}
+
+function toggleAdvanced() {
+  const bar = document.getElementById('advanced-bar');
+  const opening = bar.style.display === 'none';
+  bar.style.display = opening ? 'flex' : 'none';
+  document.getElementById('advanced-btn').textContent = opening ? 'Hide advanced' : 'Advanced';
+}
+
+// ─── Session ────────────────────────────────────────────────────────────────
+// Uses the saved login for this server; failing that, signs in to its public read-only demo.
+async function connectSession() {
+  if (BASE) {
+    const signedIn = TOKEN ? await identify() : false;
+    if (!signedIn) await signInAsDemo();
+  } else {
+    session = null;
+  }
+  applySessionUi();
+  await refresh();
+}
+
+// Confirms who the current token belongs to, and whether that account may only read.
+async function identify() {
+  try {
+    const me = await api('GET', '/auth/me');
+    session = { email: me.email, readOnly: Boolean(me.readOnly) };
+    return true;
+  } catch {
+    if (TOKEN) setToken('');
+    session = null;
+    return false;
+  }
+}
+
+// Signs in to the server's demo account. Silent when a server offers none — the dashboard just stays logged out.
+async function signInAsDemo() {
+  try {
+    const demo = await api('POST', '/auth/demo');
+    setToken(demo.accessToken);
+    session = { email: demo.user.email, readOnly: true };
+    return true;
+  } catch {
+    session = null;
+    return false;
+  }
+}
+
+function logout() {
+  setToken('');
+  session = null;
+  toast('Logged out', 'success');
+  connectSession();
+}
+
+// Read-only sessions hide every control that would change data, and explain why.
+function applySessionUi() {
+  const readOnly = Boolean(session && session.readOnly);
+  document.body.classList.toggle('read-only', readOnly);
+  document.getElementById('demo-banner').style.display = readOnly ? 'flex' : 'none';
+  document.getElementById('logout-btn').style.display = session && !readOnly ? '' : 'none';
+  document.getElementById('session-label').textContent =
+    session ? (readOnly ? `Demo: ${session.email} (read-only)` : `Signed in as ${session.email}`) : 'Not signed in';
 }
 
 async function refresh() {
@@ -472,11 +561,11 @@ async function loadWorkflows() {
               <div class="flex-gap">
                 <button class="btn-ghost btn-sm" data-name="${esc(wf.name)}" onclick="loadExecutions('${wf.id}', this.dataset.name)">Executions</button>
                 <button class="btn-ghost btn-sm" onclick="showWebhook('${wf.id}')">🔗 Webhook</button>
-                <button class="btn-primary btn-sm" onclick="triggerWorkflow('${wf.id}')">▶ Run</button>
+                <button class="btn-primary btn-sm" data-write onclick="triggerWorkflow('${wf.id}')">▶ Run</button>
                 ${wf.status === 'ACTIVE'
-                  ? `<button class="btn-ghost btn-sm" onclick="pauseWorkflow('${wf.id}')">⏸ Pause</button>`
-                  : `<button class="btn-success btn-sm" onclick="resumeWorkflow('${wf.id}')">▶ Resume</button>`}
-                <button class="btn-danger btn-sm" onclick="deleteWorkflow('${wf.id}')">✕</button>
+                  ? `<button class="btn-ghost btn-sm" data-write onclick="pauseWorkflow('${wf.id}')">⏸ Pause</button>`
+                  : `<button class="btn-success btn-sm" data-write onclick="resumeWorkflow('${wf.id}')">▶ Resume</button>`}
+                <button class="btn-danger btn-sm" data-write onclick="deleteWorkflow('${wf.id}')">✕</button>
               </div>
             </td>
           </tr>
@@ -644,7 +733,7 @@ async function loadApiKeys() {
             <td><code>${esc(k.keyPrefix)}…</code></td>
             <td>${k.lastUsedAt ? new Date(k.lastUsedAt).toLocaleString() : 'Never'}</td>
             <td>${new Date(k.createdAt).toLocaleDateString()}</td>
-            <td><button class="btn-danger btn-sm" onclick="revokeKey('${k.id}')">Revoke</button></td>
+            <td><button class="btn-danger btn-sm" data-write onclick="revokeKey('${k.id}')">Revoke</button></td>
           </tr>
         `).join('')}</tbody>
       </table>`;
@@ -727,7 +816,7 @@ async function submitAuth() {
     setToken(r.accessToken);
     closeModal('login-modal');
     toast(`${authMode === 'login' ? 'Logged in' : 'Registered'} as ${r.user.email}`, 'success');
-    refresh();
+    connectSession();
   } catch(e) { toast(e.message, 'error'); }
 }
 
@@ -767,7 +856,7 @@ try {
 TOKEN = savedTokens[BASE] || '';
 document.getElementById('base-url').value = BASE;
 document.getElementById('token-input').value = TOKEN;
-refresh();
+connectSession();
 </script>
 </body>
 </html>

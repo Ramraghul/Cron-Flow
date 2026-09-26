@@ -6,9 +6,11 @@ import { WorkflowSortField } from '../dto/list-workflows-query.dto';
 
 const withOrderedSteps = { steps: { orderBy: { stepOrder: 'asc' } } } satisfies Prisma.WorkflowInclude;
 const withCounts = { _count: { select: { steps: true, executions: true } } } satisfies Prisma.WorkflowInclude;
+const withOwner = { user: { select: { email: true } } } satisfies Prisma.WorkflowInclude;
 
 export type WorkflowWithSteps = Prisma.WorkflowGetPayload<{ include: typeof withOrderedSteps }>;
 export type WorkflowWithCounts = Prisma.WorkflowGetPayload<{ include: typeof withCounts }>;
+export type WorkflowWithOwner = Prisma.WorkflowGetPayload<{ include: typeof withOwner }>;
 
 export interface NewWorkflowStep {
     stepOrder: number;
@@ -93,8 +95,8 @@ export class WorkflowsRepository {
         return count > 0;
     }
 
-    findByWebhookToken(webhookToken: string): Promise<Workflow | null> {
-        return this.prisma.workflow.findUnique({ where: { webhookToken } });
+    findByWebhookToken(webhookToken: string): Promise<WorkflowWithOwner | null> {
+        return this.prisma.workflow.findUnique({ where: { webhookToken }, include: withOwner });
     }
 
     /** Applies field changes and, when `steps` is given, replaces the step list in the same transaction. */

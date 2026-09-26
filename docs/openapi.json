@@ -127,6 +127,49 @@
         ]
       }
     },
+    "/api/v1/auth/demo": {
+      "post": {
+        "description": "Returns a token for the public demo account — no credentials needed. The account can read everything but every create, change, delete or run is refused with 403, so the demo data stays as it is.",
+        "operationId": "Auth_demo",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "This server has no demo account",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded — retry after the window resets",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Sign in to the read-only demo",
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
     "/api/v1/auth/me": {
       "get": {
         "description": "Handy for checking that a token or API key works.",
@@ -1957,12 +2000,18 @@
             ],
             "example": "jwt",
             "description": "How this request was authenticated"
+          },
+          "readOnly": {
+            "type": "boolean",
+            "example": false,
+            "description": "True for the public demo account, which may read but never create, change or run anything."
           }
         },
         "required": [
           "id",
           "email",
-          "authMethod"
+          "authMethod",
+          "readOnly"
         ]
       },
       "CreateApiKeyDto": {

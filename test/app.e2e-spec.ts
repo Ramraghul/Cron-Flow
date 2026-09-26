@@ -1,4 +1,5 @@
 import { NestExpressApplication } from '@nestjs/platform-express';
+import { StepType } from '@prisma/client';
 import request from 'supertest';
 import { PrismaService } from '../src/database/prisma.service';
 import { QueueService } from '../src/queues/services/queue.service';
@@ -322,6 +323,63 @@ describe('CronFlow API (e2e)', () => {
             expect(Object.keys(response.body.paths)).toEqual(
                 expect.arrayContaining([`${API}/workflows`, `${API}/workflows/{workflowId}/executions`, '/health/ready']),
             );
+        });
+    });
+    describe('read-only demo account', () => {
+        const DEMO_EMAIL = 'demo@example.com';
+        let demoToken: string;
+        let demoUserId: string;
+
+        it('signs in without credentials and reports itself as read-only', async () => {
+            await register(DEMO_EMAIL);
+
+            const demo = await api().post(`${API}/auth/demo`).expect(200);
+            demoToken = demo.body.accessToken;
+            demoUserId = demo.body.user.id;
+            expect(demo.body.user.email).toBe(DEMO_EMAIL);
+
+            const me = await api().get(`${API}/auth/me`).set(auth(demoToken)).expect(200);
+            expect(me.body).toMatchObject({ email: DEMO_EMAIL, readOnly: true });
+        });
+
+        it('reads freely but is refused every write', async () => {
+            await api().get(`${API}/workflows`).set(auth(demoToken)).expect(200);
+            await api().get(`${API}/metrics`).set(auth(demoToken)).expect(200);
+
+            const blocked = await api()
+                .post(`${API}/workflows`)
+                .set(auth(demoToken))
+                .send({ name: 'Nope', cronExpression: '0 2 * * *', steps: [DELAY_STEP] })
+                .expect(403);
+            expect(blocked.body.message).toContain('read-only demo account');
+
+            await api().post(`${API}/api-keys`).set(auth(demoToken)).send({ name: 'Nope' }).expect(403);
+            expect(await prisma.workflow.count({ where: { userId: demoUserId } })).toBe(0);
+        });
+
+        it('will not start a run through a demo workflow’s webhook', async () => {
+            const workflow = await prisma.workflow.create({
+                data: {
+                    name: 'Demo showcase',
+                    cronExpression: '0 2 * * *',
+                    timezone: 'UTC',
+                    userId: demoUserId,
+                    webhookToken: 'demo-webhook-token-000000000000',
+                    steps: { create: [{ stepOrder: 1, type: StepType.DELAY, config: { duration: 10 } }] },
+                },
+            });
+
+            await api().post(`${API}/webhooks/${workflow.webhookToken}/trigger`).send({}).expect(403);
+
+            expect(await prisma.execution.count({ where: { workflowId: workflow.id } })).toBe(0);
+        });
+
+        it('leaves ordinary accounts free to write', async () => {
+            await api()
+                .post(`${API}/workflows`)
+                .set(auth())
+                .send({ name: 'Still allowed', cronExpression: '0 2 * * *', steps: [DELAY_STEP] })
+                .expect(201);
         });
     });
 });

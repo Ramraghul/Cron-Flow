@@ -2,6 +2,7 @@ import { ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/com
 import { Request } from 'express';
 import { ApiKeysService } from '../../api-keys/services/api-keys.service';
 import { API_KEY_HEADER } from '../../app.constants';
+import { DemoAccountsService } from '../../common/services/demo-accounts.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 
 /**
@@ -10,8 +11,11 @@ import { JwtAuthGuard } from './jwt-auth.guard';
  */
 @Injectable()
 export class JwtOrApiKeyGuard extends JwtAuthGuard {
-    constructor(private readonly apiKeysService: ApiKeysService) {
-        super();
+    constructor(
+        private readonly apiKeysService: ApiKeysService,
+        demoAccounts: DemoAccountsService,
+    ) {
+        super(demoAccounts);
     }
 
     override async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -27,6 +31,7 @@ export class JwtOrApiKeyGuard extends JwtAuthGuard {
             throw new UnauthorizedException('Invalid API key');
         }
 
+        this.demoAccounts.assertMayWrite(user.email, request.method);
         request.user = user;
         return true;
     }

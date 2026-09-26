@@ -1,15 +1,17 @@
-import { ConflictException, UnauthorizedException } from '@nestjs/common';
+import { ConflictException, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import * as bcrypt from 'bcrypt';
 import { buildUser } from '../../../test/utils/factories';
 import { createConfigMock, createMock } from '../../../test/utils/mocks';
+import { DemoAccountsService } from '../../common/services/demo-accounts.service';
 import { AuthRepository } from '../repositories/auth.repository';
 import { AuthService } from './auth.service';
 
 const AUTH_CONFIG = { jwtSecret: 'unit-test-secret', jwtExpiresInSeconds: 3600, bcryptSaltRounds: 4 };
 const EMAIL = 'ada@example.com';
+const DEMO_EMAIL = 'demo@example.com';
 const PASSWORD = 'correct-horse-battery-staple';
 
 describe('AuthService', () => {
@@ -27,10 +29,33 @@ describe('AuthService', () => {
                 { provide: AuthRepository, useValue: repository },
                 { provide: JwtService, useValue: jwtService },
                 { provide: ConfigService, useValue: createConfigMock({ auth: AUTH_CONFIG }) },
+                {
+                    provide: DemoAccountsService,
+                    useValue: new DemoAccountsService(createConfigMock({ demo: { readOnlyEmails: [DEMO_EMAIL] } })),
+                },
             ],
         }).compile();
 
         service = moduleRef.get(AuthService);
+    });
+
+    describe('demoLogin', () => {
+        it('issues a token for the configured demo account without credentials', async () => {
+            const demoUser = buildUser({ email: DEMO_EMAIL });
+            repository.findUserByEmail.mockResolvedValue(demoUser);
+
+            const result = await service.demoLogin();
+
+            expect(repository.findUserByEmail).toHaveBeenCalledWith(DEMO_EMAIL);
+            expect(result.user).toEqual({ id: demoUser.id, email: DEMO_EMAIL });
+            expect(jwtService.verify(result.accessToken)).toMatchObject({ sub: demoUser.id, email: DEMO_EMAIL });
+        });
+
+        it('reports that there is no demo account when the configured one is missing', async () => {
+            repository.findUserByEmail.mockResolvedValue(null);
+
+            await expect(service.demoLogin()).rejects.toBeInstanceOf(NotFoundException);
+        });
     });
 
     describe('register', () => {

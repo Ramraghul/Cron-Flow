@@ -10,7 +10,7 @@ import {
 } from '@prisma/client';
 import { AuthenticatedUser } from '../../src/common/interfaces/authenticated-user.interface';
 import { ExecutionForRun, ExecutionWithDetails } from '../../src/executions/repositories/executions.repository';
-import { WorkflowWithCounts, WorkflowWithSteps } from '../../src/workflows/repositories/workflows.repository';
+import { WorkflowWithCounts, WorkflowWithOwner, WorkflowWithSteps } from '../../src/workflows/repositories/workflows.repository';
 
 /** Test data builders with sensible defaults. Override only what a test cares about. */
 
@@ -60,6 +60,10 @@ export function buildWorkflow(overrides: Partial<WorkflowWithSteps> = {}): Workf
     };
 }
 
+export function buildWorkflowWithOwner(overrides: Partial<WorkflowWithOwner> = {}): WorkflowWithOwner {
+    const { steps: _steps, ...workflow } = buildWorkflow();
+    return { ...workflow, user: { email: authenticatedUser.email }, ...overrides };
+}
 export function buildWorkflowWithCounts(overrides: Partial<WorkflowWithCounts> = {}): WorkflowWithCounts {
     const { steps: _steps, ...workflow } = buildWorkflow();
     return { ...workflow, _count: { steps: 1, executions: 0 }, ...overrides };

@@ -7,6 +7,7 @@ process.env.JWT_SECRET = 'e2e-jwt-secret-with-at-least-32-characters';
 process.env.BCRYPT_SALT_ROUNDS = '4';
 process.env.LOG_LEVEL = 'silent';
 process.env.THROTTLE_LIMIT = '1000';
+process.env.DEMO_READ_ONLY_EMAILS = 'demo@example.com';
 // Run jobs in-process so tests can observe complete executions.
 process.env.WORKER_ENABLED = 'true';
 process.env.WORKER_CONCURRENCY = '2';

@@ -26,4 +26,10 @@ export class AuthResponseDto {
 export class CurrentUserDto extends AuthUserDto {
     @ApiProperty({ enum: ['jwt', 'api-key'], example: 'jwt', description: 'How this request was authenticated' })
     authMethod!: AuthMethod;
+
+    @ApiProperty({
+        example: false,
+        description: 'True for the public demo account, which may read but never create, change or run anything.',
+    })
+    readOnly!: boolean;
 }

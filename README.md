@@ -377,6 +377,8 @@ To run the worker as its own process, as in production, set `WORKER_ENABLED=fals
 
 **Dashboard:** open `dashboard.html` directly in a browser (no build step), then log in or register to see workflows, executions, schedules, metrics and webhook URLs. Its **API** selector switches between **Local** (`http://localhost:3000`) and **Deployed** (`https://cron-flow-ramraghuls-projects.vercel.app`), or takes a custom URL, and each server keeps its own login. Opened from this machine it starts on Local; hosted (like [cron-flow-ui.vercel.app](https://cron-flow-ui.vercel.app)) it starts on Deployed. A `?api=https://…` parameter in the page address overrides both. The servers are listed in `API_TARGETS` at the top of its script.
 
+When the API sets `DEMO_READ_ONLY_EMAILS`, the dashboard signs into that account by itself (`POST /api/v1/auth/demo`), shows a **Read-only demo** banner and hides every control that would change data — the API refuses those requests anyway, including runs through a demo workflow's webhook. **Login / Register** starts a normal session, **Logout** returns to the demo view, and **Advanced** reveals the token field for pasting a JWT or API key.
+
 For a hosted dashboard, the API must be served over **HTTPS** (browsers block `http://` APIs from `https://` pages, except `localhost`), and the API's `CORS_ORIGINS` must include the dashboard's origin.
 
 ### Environment variables
@@ -393,6 +395,7 @@ All variables are validated at startup (`src/config/env.validation.ts`). If anyt
 | `JWT_EXPIRES_IN` | `1d` | Access-token lifetime: `900s`, `15m`, `12h`, `7d`… |
 | `BCRYPT_SALT_ROUNDS` | `12` | Password hashing cost (4–15). |
 | `CORS_ORIGINS` | `*` | Comma-separated allowed origins, or `*`. |
+| `DEMO_READ_ONLY_EMAILS` | _(empty)_ | Accounts that may read but never write, for a public demo. Empty disables the demo. |
 | `TRUST_PROXY_HOPS` | `0` | Reverse-proxy hops to trust for client IPs (set `1` behind Render, Heroku or a load balancer). |
 | `SWAGGER_ENABLED` | `true` | Serve `/docs` and `/docs-json`. |
 | `THROTTLE_TTL` / `THROTTLE_LIMIT` | `60000` / `100` | Rate-limit window (ms) and requests per window, per client IP. |
@@ -577,6 +580,7 @@ Auth: 🔓 public · 🔑 JWT **or** API key · 🎫 JWT only · 🪝 webhook to
 | `GET` | `/api/v1/` | 🔓 | 200 | Service info: version, dependency health and links to the docs and probes |
 | `POST` | `/api/v1/auth/register` | 🔓 | 201 | Create an account; returns an access token |
 | `POST` | `/api/v1/auth/login` | 🔓 | 200 | Exchange credentials for an access token |
+| `POST` | `/api/v1/auth/demo` | 🔓 | 200 | Token for the read-only demo account, no credentials needed |
 | `GET` | `/api/v1/auth/me` | 🔑 | 200 | Current identity and auth method |
 | `POST` | `/api/v1/workflows` | 🔑 | 201 | Create a workflow and register its schedule |
 | `GET` | `/api/v1/workflows` | 🔑 | 200 | List (`page`, `limit`, `status`, `search`, `sortBy`, `sortOrder`) |
@@ -664,7 +668,7 @@ The live demo runs on Vercel at `https://cron-flow-ramraghuls-projects.vercel.ap
 How it is set up:
 
 1. Import the repository in Vercel (NestJS is detected automatically), and add the **Prisma Postgres** and **Redis** integrations from the **Storage** tab.
-2. Set these environment variables: `DATABASE_URL` (the plain `postgres://…` string, without quotes), `REDIS_URL`, `JWT_SECRET` (32+ characters), `NODE_ENV=production`, `WORKER_ENABLED=false`, `TRUST_PROXY_HOPS=1` (so rate limits count each client, not the Vercel proxy, and generated links use `https`), and `CORS_ORIGINS=https://cron-flow-ui.vercel.app,http://localhost:3000`. Don't set `PORT`; Vercel assigns it.
+2. Set these environment variables: `DATABASE_URL` (the plain `postgres://…` string, without quotes), `REDIS_URL`, `JWT_SECRET` (32+ characters), `NODE_ENV=production`, `WORKER_ENABLED=false`, `TRUST_PROXY_HOPS=1` (so rate limits count each client, not the Vercel proxy, and generated links use `https`), `DEMO_READ_ONLY_EMAILS=<the account visitors should browse>`, and `CORS_ORIGINS=https://cron-flow-ui.vercel.app,http://localhost:3000`. Don't set `PORT`; Vercel assigns it.
 3. Vercel doesn't run migrations. Apply them once from your machine: `DATABASE_URL='postgres://…' npx prisma migrate deploy`. Verify afterwards with `GET /api/v1`, which reports version, dependency health and links.
 4. **Make it public:** under **Settings → Deployment Protection**, disable **Vercel Authentication**. Otherwise every request is redirected to a Vercel login, and the dashboard can't reach the API.
 5. Vercel ships only the files the code visibly references. The app resolves Swagger UI's files (`swagger-ui-dist`) explicitly, so Vercel includes them and `/docs` serves them directly. If they are ever missing, it falls back to the jsDelivr CDN. The startup log shows which: `Swagger UI served at /docs (UI assets from local files)`.

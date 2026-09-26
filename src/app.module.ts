@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AuthModule } from './auth/auth.module';
+import { CommonModule } from './common/common.module';
 import { AppConfig } from './config/configuration';
 import { CoreModule } from './core/core.module';
 import { ExecutionEngineModule } from './execution-engine/execution-engine.module';
@@ -17,6 +18,7 @@ import { WorkflowsModule } from './workflows/workflows.module';
 @Module({
     imports: [
         CoreModule,
+        CommonModule,
         ThrottlerModule.forRootAsync({
             inject: [ConfigService],
             useFactory: (config: ConfigService<AppConfig, true>) => {

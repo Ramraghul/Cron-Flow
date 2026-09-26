@@ -1,10 +1,11 @@
-import { ConflictException, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import { ConflictException, Injectable, Logger, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { User } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { randomUUID } from 'node:crypto';
 import { AuthenticatedUser } from '../../common/interfaces/authenticated-user.interface';
+import { DemoAccountsService } from '../../common/services/demo-accounts.service';
 import { AppConfig } from '../../config/configuration';
 import { AuthResponseDto } from '../dto/auth-response.dto';
 import { LoginDto } from '../dto/login.dto';
@@ -22,6 +23,7 @@ export class AuthService {
     constructor(
         private readonly authRepository: AuthRepository,
         private readonly jwtService: JwtService,
+        private readonly demoAccounts: DemoAccountsService,
         config: ConfigService<AppConfig, true>,
     ) {
         this.authConfig = config.get('auth', { infer: true });
@@ -59,6 +61,16 @@ export class AuthService {
             throw new UnauthorizedException('The account for this token no longer exists');
         }
         return { id: user.id, email: user.email, authMethod: 'jwt' };
+    }
+
+    /** Signs in to the read-only demo account, so the dashboard needs no credentials of its own. */
+    async demoLogin(): Promise<AuthResponseDto> {
+        const email = this.demoAccounts.demoEmail;
+        const user = email ? await this.authRepository.findUserByEmail(email) : null;
+        if (!user) {
+            throw new NotFoundException('This server has no demo account');
+        }
+        return this.issueAccessToken(user);
     }
 
     private issueAccessToken(user: Pick<User, 'id' | 'email'>): AuthResponseDto {

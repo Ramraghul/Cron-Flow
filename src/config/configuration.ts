@@ -18,6 +18,7 @@ export interface AppConfig {
         bcryptSaltRounds: number;
     };
     throttle: { ttlMs: number; limit: number };
+    demo: { readOnlyEmails: string[] };
     log: { level: LogLevel };
     worker: { enabled: boolean; concurrency: number };
     scheduler: { syncOnBoot: boolean };
@@ -33,6 +34,14 @@ export function durationToSeconds(duration: string): number {
         throw new Error(`Invalid duration "${duration}" — expected <number><s|m|h|d>`);
     }
     return Number(match[1]) * SECONDS_PER_UNIT[match[2]];
+}
+
+/** Parses a comma-separated list of emails into lower-case entries. */
+export function parseEmailList(raw: string): string[] {
+    return raw
+        .split(',')
+        .map((email) => email.trim().toLowerCase())
+        .filter(Boolean);
 }
 
 /** Parses `CORS_ORIGINS` — either `*` or a comma-separated list of origins. */
@@ -62,6 +71,7 @@ export function buildConfig(env: EnvironmentVariables): AppConfig {
             bcryptSaltRounds: env.BCRYPT_SALT_ROUNDS,
         },
         throttle: { ttlMs: env.THROTTLE_TTL, limit: env.THROTTLE_LIMIT },
+        demo: { readOnlyEmails: parseEmailList(env.DEMO_READ_ONLY_EMAILS) },
         log: { level: env.LOG_LEVEL },
         worker: { enabled: env.WORKER_ENABLED, concurrency: env.WORKER_CONCURRENCY },
         scheduler: { syncOnBoot: env.SCHEDULER_SYNC_ON_BOOT },
